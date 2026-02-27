@@ -1,241 +1,387 @@
 # Mô Hình Dữ Liệu & Chaincode
 
-## 1. Các Loại Batch
+## 1. Tổng Quan Các Entity On-Chain
 
 ```
-HarvestBatch    — Lô thu hoạch       (điểm bắt đầu chuỗi)
-ProcessedBatch  — Lô sau sơ chế
-RoastBatch      — Lô sau rang
-PackagedBatch   — Lô đóng gói thành phẩm (gắn QR)
+World State (CouchDB key-value):
+┌──────────────────────────────────────────────────────┐
+│  Batch (docType: "batch")                            │
+│  → type: HARVEST | PROCESSED | ROAST | PACKAGED      │
+└──────────────────────────────────────────────────────┘
+
+Event Log (Fabric ledger — bất biến):
+┌──────────────────────────────────────────────────────┐
+│  BATCH_CREATED                                       │
+│  BATCH_STATUS_UPDATED                                │
+│  TRANSFER_REQUESTED / TRANSFER_ACCEPTED              │
+│  EVIDENCE_ADDED                                      │
+│  FARM_ACTIVITY_RECORDED                              │
+│  BATCH_IN_STOCK / BATCH_SOLD                         │
+└──────────────────────────────────────────────────────┘
+
+Off-chain Index DB (PostgreSQL):
+┌──────────────────────────────────────────────────────┐
+│  batches           — mirror world state              │
+│  farm_activities   — từ FARM_ACTIVITY_RECORDED       │
+│  timeline_cache    — assembled timeline per package  │
+└──────────────────────────────────────────────────────┘
 ```
 
-## 2. Cấu Trúc Dữ Liệu On-Chain (World State)
+**Quyết định thiết kế — State vs Event:**
 
-### Quyết định thiết kế: Lưu state hiện tại + emit event
+| Dữ liệu | Lưu ở đâu | Lý do |
+|---|---|---|
+| Batch snapshot | World state | Query nhanh, đọc được kể cả khi indexer lỗi |
+| evidenceHash / evidenceUri | World state (trong Batch) | Cần verify trực tiếp, cố định 1 per batch |
+| Farm activity | Event only | Số lượng không giới hạn — lưu state làm Batch phình vô hạn |
+| Lịch sử chuyển trạng thái | Event only | Indexer xây timeline |
 
-- **World state (CouchDB)** lưu snapshot hiện tại của Batch,
-  bao gồm `evidenceHash/Uri` — đảm bảo vẫn đọc được dù indexer lỗi
-- **Event log** ghi lại mọi hành động để indexer xây dựng timeline
-
-Cách này cho phép:
-- Query nhanh state hiện tại qua CouchDB rich query
-- Xây dựng timeline đầy đủ qua event indexer
-- Fallback an toàn: nếu indexer chưa bắt kịp, state vẫn có đủ
-  thông tin cơ bản
-
-### Batch.java
+## 2. Batch — Cấu Trúc World State
 
 ```java
 public class Batch {
+    private String batchId;
+    // UUID do chaincode sinh. Fabric là key-value store —
+    // key do app/chaincode tự đặt (không có auto-increment).
+    // Dùng txId + timestamp để đảm bảo unique tuyệt đối.
 
-    // ── Định danh ─────────────────────────────────────────────
-    private String batchId;      // UUID do chaincode sinh khi tạo,
-                                 // đảm bảo unique trên world state
-                                 // (Fabric không tự cấp ID —
-                                 //  chaincode/app tự sinh UUID)
-    private String publicCode;   // Display code: FARM-20240315-001
-                                 // Dễ đọc, dùng để in QR
-    private String docType;      // Luôn = "batch"
-                                 // Bắt buộc để CouchDB rich query
-                                 // không lẫn với document type khác
+    private String publicCode;   // FARM-20240315-001 — dễ đọc, dùng in QR
+    private String docType;      // Luôn = "batch" — bắt buộc cho CouchDB query
 
-    // ── Phân loại & liên kết ──────────────────────────────────
     private String type;         // HARVEST | PROCESSED | ROAST | PACKAGED
-    private String parentBatchId;// batchId của lô cha (truy ngược)
+    private String parentBatchId;// batchId lô cha; "" nếu là HarvestBatch
 
-    // ── Quyền sở hữu ──────────────────────────────────────────
-    private String ownerMSP;     // MSP của org đang sở hữu lô
-    private String ownerUserId;  // CN của cert người tạo/sở hữu
+    private String ownerMSP;     // MSP org đang sở hữu; đổi sau acceptTransfer
+    private String ownerUserId;  // CN của cert người tạo
 
-    // ── Trạng thái ────────────────────────────────────────────
-    private String status;       // Xem enum Status bên dưới
+    private String status;       // Xem sơ đồ chuyển trạng thái bên dưới
+    private String pendingToMSP; // MSP org nhận khi TRANSFER_PENDING; "" còn lại
 
-    // ── Thời gian ─────────────────────────────────────────────
-    private String createdAt;    // ISO-8601, lấy từ stub.getTxTimestamp()
-    private String updatedAt;    // ISO-8601, cập nhật mỗi lần thay đổi
+    private String createdAt;    // ISO-8601, từ stub.getTxTimestamp()
+    private String updatedAt;
 
-    // ── Chứng cứ (Option A: lưu trong state) ──────────────────
-    private String evidenceHash; // SHA-256 của file chứng cứ
-    private String evidenceUri;  // IPFS CID hoặc URL file
+    private String evidenceHash; // SHA-256 file chứng cứ — lưu state để verify trực tiếp
+    private String evidenceUri;  // IPFS CID
 
-    // ── Dữ liệu nghiệp vụ ────────────────────────────────────
-    private Map<String, String> metadata; // Xem chi tiết mục 3
+    private Map<String, String> metadata; // Dữ liệu nghiệp vụ theo type
 }
 ```
-
-> **Tại sao `docType`?**
-> CouchDB lưu tất cả document trong cùng một database per channel.
-> Nếu không có `docType`, câu query `{"selector": {"status": "COMPLETED"}}`
-> sẽ trả về mọi document có field `status` — kể cả document không
-> phải Batch. Thêm `docType = "batch"` giúp filter chính xác.
 
 ## 3. Metadata Theo Loại Batch
 
 ```java
-// HarvestBatch
-{
-  "farmLocation":   "Cầu Đất, Đà Lạt, Lâm Đồng",
-  "harvestDate":    "2024-03-15",
-  "coffeeVariety":  "Arabica Bourbon",
-  "weightKg":       "500",
-  "farmerId":       "farmer_alice"
-}
+// HARVEST
+{ "farmLocation": "Cầu Đất, Đà Lạt", "harvestDate": "2024-03-15",
+  "coffeeVariety": "Arabica Bourbon", "weightKg": "500" }
 
-// ProcessedBatch
-{
-  "processingMethod": "Washed",        // Washed | Natural | Honey
-  "startDate":        "2024-03-18",
-  "endDate":          "2024-03-25",
-  "facilityName":     "Xưởng sơ chế Đà Lạt",
-  "weightKg":         "480"            // Hao hụt sau sơ chế
-}
+// PROCESSED
+{ "processingMethod": "Washed", "startDate": "2024-03-18",
+  "endDate": "2024-03-25", "facilityName": "Xưởng Đà Lạt", "weightKg": "480" }
 
-// RoastBatch
-{
-  "roastProfile":        "Medium-Light", // Light|Medium-Light|Medium|Dark
-  "roastDate":           "2024-04-01",
-  "roastDurationMinutes":"12",
-  "roasterId":           "roaster_charlie",
-  "weightKg":            "420"
-}
+// ROAST
+{ "roastProfile": "Medium-Light", "roastDate": "2024-04-01",
+  "roastDurationMinutes": "12", "weightKg": "420" }
 
-// PackagedBatch
-{
-  "packageWeight": "250g",             // 250g | 500g | 1kg
-  "packageCount":  "100",
-  "packagedDate":  "2024-04-03",
-  "expiryDate":    "2025-04-03",
-  "qrUrl":         "https://trace.example.com/trace/PKG-20240403-001"
-}
+// PACKAGED
+{ "packageWeight": "250g", "packageCount": "100",
+  "packagedDate": "2024-04-03", "expiryDate": "2025-04-03",
+  "qrUrl": "https://trace.example.com/trace/PKG-20240403-001" }
 ```
 
-## 4. Enum Status & Chuyển Trạng Thái Hợp Lệ
+## 4. Status & Chuyển Trạng Thái
+
+### Sơ Đồ
 
 ```
-CREATED         → Batch vừa được tạo
-IN_PROCESS      → Đang xử lý (sơ chế / rang)
-COMPLETED       → Xử lý xong, sẵn sàng bàn giao
-TRANSFER_PENDING→ Org hiện tại đã requestTransfer, chờ bên kia accept
-TRANSFERRED     → Đã bàn giao xong (ownerMSP đã thay đổi)
-IN_STOCK        → Đang ở kho bán lẻ (Retailer cập nhật)
-SOLD            → Đã bán cho người tiêu dùng
-
-Chuyển trạng thái hợp lệ:
-CREATED → IN_PROCESS → COMPLETED → TRANSFER_PENDING → TRANSFERRED
-TRANSFERRED (PackagedBatch) → IN_STOCK → SOLD
+              ┌──────────┐
+              │ CREATED  │  ← HARVEST / PROCESSED / ROAST bắt đầu ở đây
+              └────┬─────┘
+                   │
+              ┌────▼──────┐
+              │IN_PROCESS │  optional trong V1 — xem ghi chú B
+              └────┬──────┘
+                   │
+              ┌────▼──────┐
+              │ COMPLETED │  ← PACKAGED khởi tạo thẳng ở đây
+              └────┬──────┘
+                   │ requestTransfer
+         ┌─────────▼──────────┐
+         │  TRANSFER_PENDING  │
+         └─────────┬──────────┘
+                   │ acceptTransfer — AND endorsement
+                   │ (không qua updateBatchStatus)
+              ┌────▼──────┐
+              │TRANSFERRED│  ownerMSP đã đổi sang org mới
+              └────┬──────┘
+                   │ (PACKAGED only — Retailer cập nhật)
+              ┌────▼──────┐
+              │ IN_STOCK  │
+              └────┬──────┘
+                   │
+              ┌────▼──────┐
+              │   SOLD    │
+              └───────────┘
 ```
 
-## 5. Events On-Chain
+> **[A] PackagedBatch — flow đúng theo thứ tự:**
+>
+> 1. RoastBatch sau `acceptTransfer`: status = `TRANSFERRED`,
+>    `ownerMSP` đã chuyển sang Org2MSP
+> 2. Packager (Org2) tạo `PackagedBatch`: status khởi tạo = `COMPLETED`
+>    (đóng gói hoàn tất ngay khi tạo — không qua `IN_PROCESS`)
+> 3. `PackagedBatch` qua `requestTransfer` → `TRANSFER_PENDING`
+>    → `acceptTransfer` → `TRANSFERRED`
+> 4. Retailer nhận `PackagedBatch` ở trạng thái `TRANSFERRED`
+>    rồi cập nhật `IN_STOCK` → `SOLD`
+>
+> Lưu ý: `TRANSFERRED` ở bước 3-4 là của **PackagedBatch**,
+> không phải RoastBatch — hai lô khác nhau, không nhầm lẫn.
 
-Chaincode emit event sau mỗi thao tác. Không lưu lịch sử trong state —
-indexer chịu trách nhiệm xây dựng timeline từ event log.
+> **[B] Tại sao `TRANSFER_PENDING → TRANSFERRED` không nằm
+> trong `updateBatchStatus`?**
+> Chuyển trạng thái này chỉ được phép trong `acceptTransfer`,
+> vì yêu cầu endorsement AND của cả 2 org. Nếu để
+> `updateBatchStatus` làm được, 1 bên có thể tự chuyển
+> mà không cần sự đồng ý của bên kia.
 
-| Event | Khi nào phát sinh |
+### Quy tắc theo loại batch
+
+| Batch type | Status hợp lệ |
 |---|---|
-| `BATCH_CREATED` | Tạo batch mới bất kỳ loại |
-| `BATCH_STATUS_UPDATED` | Cập nhật status |
-| `TRANSFER_REQUESTED` | Org1 gọi requestTransfer |
-| `TRANSFER_ACCEPTED` | Org2 gọi acceptTransfer — owner thực sự chuyển |
-| `EVIDENCE_ADDED` | Thêm hash chứng cứ |
-| `BATCH_IN_STOCK` | Retailer đánh dấu nhập kho |
-| `BATCH_SOLD` | Retailer đánh dấu đã bán |
+| HARVEST, PROCESSED, ROAST | CREATED → (IN_PROCESS) → COMPLETED → TRANSFER_PENDING → TRANSFERRED |
+| PACKAGED | **COMPLETED** (khởi tạo) → TRANSFER_PENDING → TRANSFERRED → IN_STOCK → SOLD |
 
-```java
-// Payload mẫu cho TRANSFER_ACCEPTED
+> **IN_STOCK và SOLD chỉ dành cho PACKAGED.**
+> `validateStatusTransition` nhận `batchType` và enforce điều này.
+
+## 5. Farm Activity — Event Only
+
+### Assumption (V1)
+
+Farm activity được ghi **sau khi tạo HarvestBatch**.
+`activityDate` là ngày thực tế diễn ra — có thể là ngày trong quá khứ
+(nông dân ghi chép lại theo tuần hoặc theo đợt).
+`recordedAt` là timestamp blockchain tại thời điểm submit.
+
+Tách entity FarmPlot/Season để log trước thu hoạch là hướng V2.
+
+### Loại Activity
+
+```
+IRRIGATION       Tưới nước
+FERTILIZATION    Bón phân
+PEST_CONTROL     Phun thuốc bảo vệ thực vật
+PRUNING          Tỉa cành
+SHADE_MANAGEMENT Quản lý che bóng
+SOIL_TEST        Kiểm tra đất
+OTHER            Khác (ghi rõ trong note)
+```
+
+### Event Payload — FARM_ACTIVITY_RECORDED
+
+```json
 {
-  "eventType":  "TRANSFER_ACCEPTED",
-  "batchId":    "ROAST-20240401-001",
-  "fromMSP":    "Org1MSP",
-  "toMSP":      "Org2MSP",
-  "timestamp":  "2024-04-02T10:30:00Z",
-  "txId":       "abc123..."
+  "eventType":      "FARM_ACTIVITY_RECORDED",
+  "harvestBatchId": "uuid-harvest-batch",
+  "activityType":   "FERTILIZATION",
+  "activityDate":   "2024-02-15",
+  "note":           "NPK 16-16-8, 200g/cây, toàn vườn lô A",
+  "evidenceHash":   "sha256abc...",
+  "evidenceUri":    "ipfs://QmXyz...",
+  "recordedBy":     "farmer_alice",
+  "recordedAt":     "2024-03-16T08:30:00Z",
+  "txId":           "abc123..."
 }
 ```
 
-## 6. Quan Hệ Batch (Parent–Child)
+## 6. Toàn Bộ Events On-Chain
 
-```
-HarvestBatch    (FARM-20240315-001)     ownerMSP: Org1MSP
-    └── ProcessedBatch (PROC-20240325-001)  ownerMSP: Org1MSP
-            └── RoastBatch (ROAST-20240401-001)  ownerMSP: Org1MSP
-                    │
-                    │ requestTransfer → acceptTransfer (AND endorsement)
-                    ▼
-            PackagedBatch (PKG-20240403-001)     ownerMSP: Org2MSP
-                    └── QR: /trace/PKG-20240403-001
-```
+| Event | Payload chính |
+|---|---|
+| `BATCH_CREATED` | batchId, type, ownerMSP, txId, blockNumber |
+| `BATCH_STATUS_UPDATED` | batchId, oldStatus, newStatus, txId |
+| `TRANSFER_REQUESTED` | batchId, fromMSP, toMSP, txId |
+| `TRANSFER_ACCEPTED` | batchId, fromMSP, toMSP, txId, blockNumber |
+| `EVIDENCE_ADDED` | batchId, hash, uri, txId |
+| `FARM_ACTIVITY_RECORDED` | harvestBatchId, activityType, activityDate, note, txId |
+| `BATCH_IN_STOCK` | batchId, txId |
+| `BATCH_SOLD` | batchId, txId |
 
-> **Quan hệ 1:1** (1 cha – 1 con) cho bản demo.
-> Mở rộng n:1 (blend nhiều lô) là Future Work.
+> `txId` và `blockNumber` được đính kèm mọi event — backend index
+> và trả về trong response. Đây là cơ sở của `verifiedOnChain: true`.
 
-## 7. Chaincode Functions (Java)
+## 7. Chaincode Java
 
-### 7.1 Kiểm tra role
+### RoleChecker.java
 
 ```java
-// RoleChecker.java
 public class RoleChecker {
-
-    public static void require(Context ctx, String... allowedRoles)
-            throws ChaincodeException {
+    public static void require(Context ctx, String... allowedRoles) {
         String role;
         try {
             role = ctx.getClientIdentity().getAttributeValue("role");
         } catch (Exception e) {
-            throw new ChaincodeException("Cannot read role from certificate");
-        }
-
-        if (role == null || role.isEmpty()) {
             throw new ChaincodeException(
-                "Certificate does not contain 'role' attribute. "
-                + "Ensure Fabric CA registered user with --id.attrs role=...:ecert"
+                "Cannot read 'role' attribute. "
+                + "Register with: --id.attrs role=...:ecert"
             );
         }
-
+        if (role == null || role.isEmpty()) {
+            throw new ChaincodeException("Certificate missing 'role' attribute.");
+        }
         for (String allowed : allowedRoles) {
             if (allowed.equals(role)) return;
         }
-
         throw new ChaincodeException(
             "Access denied. Required: " + Arrays.toString(allowedRoles)
-            + " | Caller role: " + role
-            + " | Caller MSP: " + ctx.getClientIdentity().getMSPID()
+            + " | Caller: " + role
+            + " (" + ctx.getClientIdentity().getMSPID() + ")"
         );
     }
 }
 ```
 
-### 7.2 Sinh batchId (UUID)
+### LedgerUtils.java
 
 ```java
-// LedgerUtils.java
 public class LedgerUtils {
 
-    /**
-     * Sinh UUID làm batchId.
-     * Fabric không tự cấp ID — chaincode/app tự sinh để đảm bảo unique.
-     * Dùng kết hợp txId + timestamp để tránh collision.
-     */
     public static String generateBatchId(Context ctx) {
-        String txId = ctx.getStub().getTxId();        // unique per tx
-        String ts   = ctx.getStub().getTxTimestamp()
-                         .toString();
+        String txId = ctx.getStub().getTxId();
+        String ts   = ctx.getStub().getTxTimestamp().toString();
         return UUID.nameUUIDFromBytes((txId + ts).getBytes()).toString();
     }
 
     public static String now(Context ctx) {
         return ctx.getStub().getTxTimestamp().toString();
     }
+
+    public static Batch getBatchOrThrow(Context ctx, String batchId) {
+        byte[] data = ctx.getStub().getState(batchId);
+        if (data == null || data.length == 0) {
+            throw new ChaincodeException("Batch not found: " + batchId);
+        }
+        return JSON.deserialize(data, Batch.class);
+    }
+
+    /**
+     * Kiểm tra parent batch đủ điều kiện để tạo batch con.
+     *
+     * Nguyên tắc:
+     *   Batch con chỉ được tạo khi caller đang SỞ HỮU parent.
+     *   "Cross-org" chỉ xảy ra ở bước transfer — không xảy ra
+     *   ở bước tạo batch con.
+     *
+     * Rule status theo expectedType (nghiệp vụ chặt):
+     *
+     *   HARVEST  → parent của ProcessedBatch (Org1 → Org1):
+     *              status phải COMPLETED
+     *
+     *   PROCESSED → parent của RoastBatch (Org1 → Org1):
+     *              status phải COMPLETED
+     *
+     *   ROAST    → parent của PackagedBatch (Org1 → Org2):
+     *              status phải TRANSFERRED
+     *              (bắt buộc đã acceptTransfer trước —
+     *               cả ownerMSP = Org2MSP lẫn status = TRANSFERRED
+     *               chỉ đồng thời đúng sau acceptTransfer)
+     */
+    public static void validateParentReady(Context ctx,
+            String parentBatchId, String expectedType) {
+
+        Batch  parent    = getBatchOrThrow(ctx, parentBatchId);
+        String callerMSP = ctx.getClientIdentity().getMSPID();
+
+        // 1. Đúng loại batch cha
+        if (!expectedType.equals(parent.getType())) {
+            throw new ChaincodeException(
+                "Parent type mismatch. Expected: " + expectedType
+                + " | Got: " + parent.getType()
+            );
+        }
+
+        // 2. Caller phải đang sở hữu parent
+        if (!callerMSP.equals(parent.getOwnerMSP())) {
+            throw new ChaincodeException(
+                "Caller does not own the parent batch. "
+                + "parent.ownerMSP: " + parent.getOwnerMSP()
+                + " | callerMSP: "    + callerMSP
+            );
+        }
+
+        // 3. Status hợp lệ theo loại parent
+        String requiredStatus = "ROAST".equals(expectedType)
+            ? "TRANSFERRED"
+            : "COMPLETED";
+
+        if (!requiredStatus.equals(parent.getStatus())) {
+            throw new ChaincodeException(
+                "Parent batch status invalid for type " + expectedType + ". "
+                + "Required: " + requiredStatus
+                + " | Current: " + parent.getStatus()
+            );
+        }
+    }
+
+    /**
+     * Validate chuyển trạng thái hợp lệ.
+     *
+     * [B] IN_PROCESS là optional trong V1:
+     *   CREATED → COMPLETED được phép để giảm thao tác demo.
+     *   Mọi thay đổi status đều emit event → vẫn truy được
+     *   trách nhiệm qua event log dù bỏ qua IN_PROCESS.
+     *   Nếu cần chặt hơn trong V2: bỏ "COMPLETED" khỏi
+     *   danh sách next của CREATED.
+     *
+     * TRANSFER_PENDING → TRANSFERRED KHÔNG nằm ở đây.
+     *   Chỉ xảy ra trong acceptTransfer (AND endorsement).
+     *
+     * IN_STOCK và SOLD chỉ dành cho PACKAGED batch.
+     */
+    public static void validateStatusTransition(
+            String batchType, String current, String next) {
+
+        if (("IN_STOCK".equals(next) || "SOLD".equals(next))
+                && !"PACKAGED".equals(batchType)) {
+            throw new ChaincodeException(
+                "Status '" + next + "' is only valid for PACKAGED batch. "
+                + "Current type: " + batchType
+            );
+        }
+
+        // CREATED → COMPLETED: cho phép trong V1 (IN_PROCESS optional)
+        // TRANSFER_PENDING → []: TRANSFERRED chỉ set bởi acceptTransfer
+        Map<String, List<String>> rules = Map.of(
+            "CREATED",          List.of("IN_PROCESS", "COMPLETED"),
+            "IN_PROCESS",       List.of("COMPLETED"),
+            "COMPLETED",        List.of("TRANSFER_PENDING"),
+            "TRANSFER_PENDING", List.of(),
+            "TRANSFERRED",      List.of("IN_STOCK"),
+            "IN_STOCK",         List.of("SOLD")
+        );
+
+        List<String> allowed = rules.getOrDefault(current, List.of());
+        if (!allowed.contains(next)) {
+            throw new ChaincodeException(
+                "Invalid status transition: " + current + " → " + next
+                + ("TRANSFER_PENDING".equals(current)
+                    ? " (TRANSFERRED chỉ set bởi acceptTransfer)"
+                    : "")
+            );
+        }
+    }
 }
 ```
 
-### 7.3 Toàn bộ functions chaincode
+### CoffeeTraceChaincode.java
 
 ```java
 @Contract(name = "CoffeeTraceChaincode")
 public class CoffeeTraceChaincode implements ContractInterface {
 
-    // ── CREATE ────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════
+    // CREATE BATCH
+    // ══════════════════════════════════════════════════════════
 
     @Transaction
     public Batch createHarvestBatch(Context ctx,
@@ -247,24 +393,23 @@ public class CoffeeTraceChaincode implements ContractInterface {
         Batch b = new Batch();
         b.setBatchId(LedgerUtils.generateBatchId(ctx));
         b.setPublicCode(publicCode);
-        b.setDocType("batch");                  // bắt buộc cho rich query
+        b.setDocType("batch");
         b.setType("HARVEST");
-        b.setParentBatchId("");                 // điểm đầu chuỗi, không có cha
+        b.setParentBatchId("");
         b.setOwnerMSP(ctx.getClientIdentity().getMSPID());
         b.setOwnerUserId(ctx.getClientIdentity().getId());
         b.setStatus("CREATED");
         b.setCreatedAt(LedgerUtils.now(ctx));
         b.setUpdatedAt(LedgerUtils.now(ctx));
+        b.setMetadata(Map.of(
+            "farmLocation",  farmLocation,
+            "harvestDate",   harvestDate,
+            "coffeeVariety", coffeeVariety,
+            "weightKg",      weightKg
+        ));
 
-        Map<String,String> meta = new HashMap<>();
-        meta.put("farmLocation",  farmLocation);
-        meta.put("harvestDate",   harvestDate);
-        meta.put("coffeeVariety", coffeeVariety);
-        meta.put("weightKg",      weightKg);
-        b.setMetadata(meta);
-
-        ctx.getStub().putState(b.getBatchId(), serialize(b));
-        ctx.getStub().setEvent("BATCH_CREATED", buildEventPayload(b));
+        ctx.getStub().putState(b.getBatchId(), JSON.serialize(b));
+        ctx.getStub().setEvent("BATCH_CREATED", buildPayload(b));
         return b;
     }
 
@@ -275,8 +420,17 @@ public class CoffeeTraceChaincode implements ContractInterface {
             String endDate, String weightKg) {
 
         RoleChecker.require(ctx, "PROCESSOR");
-        validateParentExists(ctx, parentBatchId, "HARVEST");
-        // ... tương tự createHarvestBatch
+        // type=HARVEST, ownerMSP=callerMSP, status=COMPLETED
+        LedgerUtils.validateParentReady(ctx, parentBatchId, "HARVEST");
+
+        Batch b = buildBatch(ctx, publicCode, "PROCESSED", parentBatchId,
+            Map.of("processingMethod", processingMethod,
+                   "startDate", startDate, "endDate", endDate,
+                   "weightKg", weightKg));
+
+        ctx.getStub().putState(b.getBatchId(), JSON.serialize(b));
+        ctx.getStub().setEvent("BATCH_CREATED", buildPayload(b));
+        return b;
     }
 
     @Transaction
@@ -286,8 +440,18 @@ public class CoffeeTraceChaincode implements ContractInterface {
             String roastDurationMinutes, String weightKg) {
 
         RoleChecker.require(ctx, "ROASTER");
-        validateParentExists(ctx, parentBatchId, "PROCESSED");
-        // ...
+        // type=PROCESSED, ownerMSP=callerMSP, status=COMPLETED
+        LedgerUtils.validateParentReady(ctx, parentBatchId, "PROCESSED");
+
+        Batch b = buildBatch(ctx, publicCode, "ROAST", parentBatchId,
+            Map.of("roastProfile", roastProfile,
+                   "roastDate", roastDate,
+                   "roastDurationMinutes", roastDurationMinutes,
+                   "weightKg", weightKg));
+
+        ctx.getStub().putState(b.getBatchId(), JSON.serialize(b));
+        ctx.getStub().setEvent("BATCH_CREATED", buildPayload(b));
+        return b;
     }
 
     @Transaction
@@ -297,44 +461,122 @@ public class CoffeeTraceChaincode implements ContractInterface {
             String packagedDate, String expiryDate) {
 
         RoleChecker.require(ctx, "PACKAGER");
-        validateParentExists(ctx, parentBatchId, "ROAST");
-        // ...
+        // type=ROAST, ownerMSP=Org2MSP, status=TRANSFERRED
+        // Ba điều kiện chỉ đồng thời đúng sau acceptTransfer
+        LedgerUtils.validateParentReady(ctx, parentBatchId, "ROAST");
+
+        String qrUrl = "https://trace.example.com/trace/" + publicCode;
+        Batch b = buildBatch(ctx, publicCode, "PACKAGED", parentBatchId,
+            Map.of("packageWeight", packageWeight,
+                   "packageCount",  packageCount,
+                   "packagedDate",  packagedDate,
+                   "expiryDate",    expiryDate,
+                   "qrUrl",         qrUrl));
+
+        // Đóng gói hoàn tất ngay khi tạo
+        // PackagedBatch bắt đầu ở COMPLETED, không qua CREATED/IN_PROCESS
+        b.setStatus("COMPLETED");
+
+        ctx.getStub().putState(b.getBatchId(), JSON.serialize(b));
+        ctx.getStub().setEvent("BATCH_CREATED", buildPayload(b));
+        return b;
     }
 
-    // ── TRANSFER (2 bước, tránh offline signing phức tạp) ────
+    // ═════════════════════════════════════════��════════════════
+    // FARM ACTIVITY (emit event only — không putState)
+    // ══════════════════════════════════════════════════════════
+
+    @Transaction
+    public void recordFarmActivity(Context ctx,
+            String harvestBatchId, String activityType,
+            String activityDate, String note,
+            String evidenceHash, String evidenceUri) {
+
+        RoleChecker.require(ctx, "FARMER");
+
+        Batch harvest = LedgerUtils.getBatchOrThrow(ctx, harvestBatchId);
+        if (!"HARVEST".equals(harvest.getType())) {
+            throw new ChaincodeException(
+                "Farm activity must link to HARVEST batch"
+            );
+        }
+        if (!harvest.getOwnerMSP()
+                .equals(ctx.getClientIdentity().getMSPID())) {
+            throw new ChaincodeException(
+                "Only batch owner can record farm activities"
+            );
+        }
+
+        List<String> validTypes = List.of(
+            "IRRIGATION", "FERTILIZATION", "PEST_CONTROL",
+            "PRUNING", "SHADE_MANAGEMENT", "SOIL_TEST", "OTHER"
+        );
+        if (!validTypes.contains(activityType)) {
+            throw new ChaincodeException(
+                "Invalid activityType: " + activityType
+            );
+        }
+
+        Map<String, String> payload = new HashMap<>(Map.of(
+            "eventType",      "FARM_ACTIVITY_RECORDED",
+            "harvestBatchId", harvestBatchId,
+            "activityType",   activityType,
+            "activityDate",   activityDate,
+            "note",           note,
+            "evidenceHash",   evidenceHash,
+            "evidenceUri",    evidenceUri,
+            "recordedBy",     ctx.getClientIdentity().getId(),
+            "recordedAt",     LedgerUtils.now(ctx),
+            "txId",           ctx.getStub().getTxId()
+        ));
+
+        ctx.getStub().setEvent("FARM_ACTIVITY_RECORDED",
+            JSON.serializeMap(payload));
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // TRANSFER
+    // ═══════════════════════��══════════════════════════════════
 
     @Transaction
     public void requestTransfer(Context ctx,
             String batchId, String toMSP) {
-        // Chỉ cần Org1 ký (policy: OR Org1MSP.peer)
-        Batch b = getBatchOrThrow(ctx, batchId);
 
+        Batch b = LedgerUtils.getBatchOrThrow(ctx, batchId);
         if (!b.getOwnerMSP().equals(ctx.getClientIdentity().getMSPID())) {
             throw new ChaincodeException("Only current owner can request transfer");
         }
+        if (!"COMPLETED".equals(b.getStatus())) {
+            throw new ChaincodeException(
+                "Batch must be COMPLETED. Status: " + b.getStatus()
+            );
+        }
+
         b.setStatus("TRANSFER_PENDING");
         b.setPendingToMSP(toMSP);
         b.setUpdatedAt(LedgerUtils.now(ctx));
 
-        ctx.getStub().putState(batchId, serialize(b));
+        ctx.getStub().putState(batchId, JSON.serialize(b));
         ctx.getStub().setEvent("TRANSFER_REQUESTED",
             buildTransferPayload(b, toMSP));
     }
 
     @Transaction
     public void acceptTransfer(Context ctx, String batchId) {
-        // Cần AND(Org1MSP.peer, Org2MSP.peer) theo endorsement policy
-        // → cả 2 peer phải endorse transaction này
-        Batch b = getBatchOrThrow(ctx, batchId);
+        // Endorsement: AND('Org1MSP.peer', 'Org2MSP.peer')
+        // Nơi DUY NHẤT set TRANSFER_PENDING → TRANSFERRED
 
+        Batch b = LedgerUtils.getBatchOrThrow(ctx, batchId);
         if (!"TRANSFER_PENDING".equals(b.getStatus())) {
-            throw new ChaincodeException("Batch is not pending transfer");
-        }
-        String callerMSP = ctx.getClientIdentity().getMSPID();
-        if (!callerMSP.equals(b.getPendingToMSP())) {
             throw new ChaincodeException(
-                "Only the designated receiver (" + b.getPendingToMSP()
-                + ") can accept transfer");
+                "Batch not pending transfer. Status: " + b.getStatus()
+            );
+        }
+        if (!ctx.getClientIdentity().getMSPID().equals(b.getPendingToMSP())) {
+            throw new ChaincodeException(
+                "Only designated receiver (" + b.getPendingToMSP()
+                + ") can accept"
+            );
         }
 
         String prevOwner = b.getOwnerMSP();
@@ -343,110 +585,111 @@ public class CoffeeTraceChaincode implements ContractInterface {
         b.setStatus("TRANSFERRED");
         b.setUpdatedAt(LedgerUtils.now(ctx));
 
-        ctx.getStub().putState(batchId, serialize(b));
+        ctx.getStub().putState(batchId, JSON.serialize(b));
         ctx.getStub().setEvent("TRANSFER_ACCEPTED",
             buildTransferAcceptedPayload(b, prevOwner));
     }
 
-    // ── STATUS UPDATE ─────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════
+    // STATUS UPDATE
+    // ══════════════════════════════════════════════════════════
 
     @Transaction
     public void updateBatchStatus(Context ctx,
             String batchId, String newStatus) {
 
-        Batch b = getBatchOrThrow(ctx, batchId);
-        validateStatusTransition(b.getStatus(), newStatus);
-
-        // Chỉ owner hiện tại mới được cập nhật
+        Batch b = LedgerUtils.getBatchOrThrow(ctx, batchId);
         if (!b.getOwnerMSP().equals(ctx.getClientIdentity().getMSPID())) {
             throw new ChaincodeException("Only current owner can update status");
         }
+        LedgerUtils.validateStatusTransition(
+            b.getType(), b.getStatus(), newStatus
+        );
 
+        String old = b.getStatus();
         b.setStatus(newStatus);
         b.setUpdatedAt(LedgerUtils.now(ctx));
 
-        ctx.getStub().putState(batchId, serialize(b));
+        ctx.getStub().putState(batchId, JSON.serialize(b));
         ctx.getStub().setEvent("BATCH_STATUS_UPDATED",
-            buildStatusPayload(b, newStatus));
+            buildStatusPayload(b, old, newStatus));
     }
 
-    // ── EVIDENCE ──────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════
+    // EVIDENCE
+    // ══════════════════════════════════════════════════════════
 
     @Transaction
     public void addEvidence(Context ctx,
             String batchId, String evidenceHash, String evidenceUri) {
 
-        Batch b = getBatchOrThrow(ctx, batchId);
-
+        Batch b = LedgerUtils.getBatchOrThrow(ctx, batchId);
         if (!b.getOwnerMSP().equals(ctx.getClientIdentity().getMSPID())) {
             throw new ChaincodeException("Only current owner can add evidence");
         }
 
-        b.setEvidenceHash(evidenceHash);  // SHA-256 lưu trong state
-        b.setEvidenceUri(evidenceUri);    // IPFS CID lưu trong state
+        b.setEvidenceHash(evidenceHash);
+        b.setEvidenceUri(evidenceUri);
         b.setUpdatedAt(LedgerUtils.now(ctx));
 
-        ctx.getStub().putState(batchId, serialize(b));
-        ctx.getStub().setEvent("EVIDENCE_ADDED",
-            buildEvidencePayload(b));
+        ctx.getStub().putState(batchId, JSON.serialize(b));
+        ctx.getStub().setEvent("EVIDENCE_ADDED", buildEvidencePayload(b));
     }
 
-    // ── QUERY ─────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════
+    // QUERY (evaluateTransaction)
+    // ══════════════════════════════════════════════════════════
 
     @Transaction(intent = Transaction.TYPE.EVALUATE)
     public Batch getBatch(Context ctx, String batchId) {
-        return getBatchOrThrow(ctx, batchId);
+        return LedgerUtils.getBatchOrThrow(ctx, batchId);
     }
 
     @Transaction(intent = Transaction.TYPE.EVALUATE)
     public String getTraceChain(Context ctx, String startBatchId) {
-        // Truy ngược từ PackagedBatch về HarvestBatch qua parentBatchId
         List<Batch> chain = new ArrayList<>();
         String currentId = startBatchId;
-
         while (currentId != null && !currentId.isEmpty()) {
             byte[] data = ctx.getStub().getState(currentId);
             if (data == null) break;
-
-            Batch b = deserialize(data);
+            Batch b = JSON.deserialize(data, Batch.class);
             chain.add(b);
             currentId = b.getParentBatchId();
         }
-        // chain = [PackagedBatch, RoastBatch, ProcessedBatch, HarvestBatch]
-        return serialize(chain);
+        // [PackagedBatch, RoastBatch, ProcessedBatch, HarvestBatch]
+        return JSON.serialize(chain);
     }
 
     @Transaction(intent = Transaction.TYPE.EVALUATE)
     public String queryBatchByPublicCode(Context ctx, String publicCode) {
-        String query = String.format(
+        return runRichQuery(ctx, String.format(
             "{\"selector\":{\"docType\":\"batch\",\"publicCode\":\"%s\"}}",
-            publicCode
-        );
-        return runRichQuery(ctx, query);
+            publicCode));
     }
 
     @Transaction(intent = Transaction.TYPE.EVALUATE)
     public String queryBatchesByStatus(Context ctx, String status) {
-        String query = String.format(
+        return runRichQuery(ctx, String.format(
             "{\"selector\":{\"docType\":\"batch\",\"status\":\"%s\"}}",
-            status
-        );
-        return runRichQuery(ctx, query);
+            status));
+    }
+
+    @Transaction(intent = Transaction.TYPE.EVALUATE)
+    public String queryBatchesByOwner(Context ctx, String ownerMSP) {
+        return runRichQuery(ctx, String.format(
+            "{\"selector\":{\"docType\":\"batch\",\"ownerMSP\":\"%s\"}}",
+            ownerMSP));
     }
 }
 ```
 
-## 8. CouchDB Rich Query — Đảm Bảo docType
-
-Tất cả query **bắt buộc** có `"docType": "batch"` để tránh trả về
-document không phải Batch (e.g., document metadata của Fabric):
+## 8. CouchDB Rich Query — Quy Tắc
 
 ```javascript
-// ✅ Đúng — có docType
+// ✅ Đúng — bắt buộc có docType
 { "selector": { "docType": "batch", "status": "IN_STOCK" } }
 { "selector": { "docType": "batch", "publicCode": "PKG-20240403-001" } }
-{ "selector": { "docType": "batch", "ownerMSP": "Org2MSP", "type": "PACKAGED" } }
 
-// ❌ Sai — thiếu docType → có thể trả về sai kết quả
+// ❌ Sai — có thể trả về document sai
 { "selector": { "status": "IN_STOCK" } }
 ```

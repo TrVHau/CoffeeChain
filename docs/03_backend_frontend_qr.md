@@ -1,198 +1,314 @@
 # Backend, Frontend & QR Code
 
-## 1. Backend API Server
+## 1. Backend — Spring Boot
 
-### 1.1 Vai Trò Rõ Ràng Của Backend
+### 1.1 Vai Trò
 
-Backend **có thể submit transaction lên blockchain** thay frontend
-để đơn giản hoá tích hợp và quản lý identity tập trung.
+Backend **submit transaction lên blockchain** để đơn giản hóa tích
+hợp và quản lý identity tập trung.
 
-Tuy nhiên cần hiểu đúng:
+| Backend làm được | Backend KHÔNG làm được |
+|---|---|
+| Submit transaction mới | Sửa transaction đã commit |
+| Index và cache event | Xóa dữ liệu trên ledger |
+| Cung cấp REST API | Thay đổi world state trực tiếp |
+| Upload file, tính hash | Giả mạo identity org khác |
+| Tạo QR code | Bypass endorsement policy |
 
-| Backend làm được       | Backend KHÔNG làm được         |
-| ---------------------- | ------------------------------ |
-| Submit transaction mới | Sửa transaction đã commit      |
-| Index và cache event   | Xóa dữ liệu trên ledger        |
-| Cung cấp API truy xuất | Thay đổi world state trực tiếp |
-| Upload file, tính hash | Giả mạo identity của org khác  |
-
-> **Blockchain vẫn là source of truth duy nhất.**
-> Backend chỉ là lớp tiện ích — nếu backend bị xâm phạm,
-> kẻ tấn công chỉ có thể submit tx mới (bị chaincode kiểm tra role),
-> không thể sửa lịch sử đã ghi.
+> **Blockchain là source of truth duy nhất.**
 
 ### 1.2 Tech Stack
 
 ```
-Runtime:       Node.js
-Framework:     Express.js
-Database:      PostgreSQL (off-chain index + QR metadata)
-Fabric SDK:    @hyperledger/fabric-gateway (npm)
-File storage:  IPFS (ipfs-http-client) hoặc local server
-QR library:    qrcode (npm)
-Hash:          crypto (built-in Node.js, SHA-256)
+Framework:    Spring Boot 3.x
+Language:     Java (cùng ngôn ngữ với chaincode)
+Database:     PostgreSQL
+              ├── batches          (mirror world state)
+              ├── farm_activities  (từ FARM_ACTIVITY_RECORDED)
+              └── ledger_refs      (txId + blockNumber per event)
+Fabric SDK:   fabric-gateway-java
+Storage:      IPFS
+QR:           ZXing (com.google.zxing)
+Hash:         MessageDigest SHA-256 (Java built-in)
 ```
 
-### 1.3 REST API Endpoints
+> **Lý do Spring Boot:** Team đã làm việc với Java qua chaincode.
+> Tái sử dụng được `Batch.java`, enum, util — giảm code trùng lặp,
+> dễ debug end-to-end.
+
+### 1.3 Cấu Trúc Project Spring Boot
 
 ```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PUBLIC — Không cần authentication
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-GET  /api/trace/:publicCode
-     → Trả về full trace chain (PackagedBatch về HarvestBatch)
-     → Backend query DB index hoặc gọi chaincode getTraceChain
-
-GET  /api/qr/:publicCode
-     → Trả về ảnh QR (PNG) để in lên bao bì
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-AUTHENTICATED — Yêu cầu JWT / Fabric identity
-━━━━━━━━━━━━━━━��━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-# Tạo batch (backend submit tx lên Fabric)
-POST /api/harvest         → Tạo HarvestBatch     (role: FARMER)
-POST /api/process         → Tạo ProcessedBatch   (role: PROCESSOR)
-POST /api/roast           → Tạo RoastBatch        (role: ROASTER)
-POST /api/package         → Tạo PackagedBatch + sinh QR (role: PACKAGER)
-
-# Bàn giao (2 bước)
-POST /api/transfer/request          → requestTransfer  (Org1)
-POST /api/transfer/accept/:batchId  → acceptTransfer   (Org2)
-
-# Cập nhật trạng thái
-PATCH /api/batch/:batchId/status    → IN_STOCK / SOLD  (role: RETAILER)
-
-# Chứng cứ
-POST /api/evidence/upload
-     → Upload file → trả { hash: "sha256...", uri: "ipfs://CID" }
-POST /api/batch/:batchId/evidence
-     → Ghi hash lên chain (addEvidence)
-
-# Dashboard
-GET  /api/batches?type=HARVEST&status=COMPLETED&ownerMSP=Org1MSP
-     → Query từ DB index
-GET  /api/batch/:batchId
-     → Chi tiết 1 batch
+backend/
+├── src/main/java/com/coffee/trace/
+│   ├── CoffeeTraceApplication.java
+│   ├── controller/
+│   │   ├── TraceController.java
+│   │   ├── BatchController.java
+│   │   ├── FarmActivityController.java
+│   │   ├── TransferController.java
+│   │   └── EvidenceController.java
+│   ├── service/
+│   │   ├── FabricGatewayService.java
+│   │   ├── EventIndexerService.java
+│   │   ├── QrGeneratorService.java
+│   │   └── EvidenceService.java
+│   ├── repository/
+│   │   ├── BatchRepository.java
+│   │   ├── FarmActivityRepository.java
+│   │   └── LedgerRefRepository.java
+│   ├── model/
+│   │   ├── Batch.java
+│   │   ├── FarmActivity.java
+│   │   └── TraceResponse.java
+│   └── config/
+│       └── FabricConfig.java
+└── src/main/resources/
+    └── application.yml
 ```
 
-### 1.4 Kết Nối Fabric Gateway SDK
+### 1.4 REST API Endpoints
 
-```javascript
-// fabricGateway.js
-const { connect, hash } = require("@hyperledger/fabric-gateway");
-const grpc = require("@grpc/grpc-js");
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PUBLIC
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-async function newGatewayConnection(org) {
-  // Mỗi org có cert và key riêng để submit tx
-  const credentials = await loadCredentials(org); // cert + key từ Fabric CA
-  const client = new grpc.Client(
-    org === "Org1"
-      ? "peer0.org1.example.com:7051"
-      : "peer0.org2.example.com:9051",
-    grpc.credentials.createSsl(credentials.tlsCert),
-  );
+GET  /api/trace/{publicCode}
+GET  /api/qr/{publicCode}          → image/png
 
-  return connect({
-    client,
-    identity: { mspId: org + "MSP", credentials: credentials.cert },
-    signer: signers.newPrivateKeySigner(credentials.privateKey),
-    hash: hash.sha256,
-  });
-}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+AUTHENTICATED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-async function submitTransaction(org, fnName, ...args) {
-  const gateway = await newGatewayConnection(org);
-  const network = gateway.getNetwork("coffee-traceability-channel");
-  const contract = network.getContract("CoffeeTraceChaincode");
-
-  try {
-    const result = await contract.submitTransaction(fnName, ...args);
-    return JSON.parse(Buffer.from(result).toString());
-  } finally {
-    gateway.close();
-  }
-}
+POST /api/harvest
+POST /api/process
+POST /api/roast
+POST /api/package
+POST /api/farm-activity
+POST /api/transfer/request
+POST /api/transfer/accept/{batchId}
+PATCH /api/batch/{batchId}/status
+POST /api/evidence/upload          → { hash, uri }
+POST /api/batch/{batchId}/evidence
+GET  /api/batches?type=&status=&ownerMSP=
+GET  /api/batch/{batchId}
 ```
 
-### 1.5 Event Indexer
+### 1.5 FabricGatewayService.java
 
-```javascript
-// indexer.js — Lắng nghe event từ Fabric, lưu vào DB off-chain
-async function startIndexer(gateway) {
-  const network = gateway.getNetwork("coffee-traceability-channel");
+```java
+@Service
+public class FabricGatewayService {
 
-  // Lắng nghe tất cả event từ CoffeeTraceChaincode
-  const events = await network.getChaincodeEvents("CoffeeTraceChaincode");
+    private final Map<String, Gateway> gateways = new HashMap<>();
 
-  console.log("Indexer started, listening for chaincode events...");
-
-  for await (const event of events) {
-    const payload = JSON.parse(Buffer.from(event.payload).toString());
-
-    switch (event.eventName) {
-      case "BATCH_CREATED":
-        await db.upsertBatch(payload);
-        break;
-      case "TRANSFER_REQUESTED":
-        await db.updateBatchStatus(payload.batchId, "TRANSFER_PENDING");
-        break;
-      case "TRANSFER_ACCEPTED":
-        await db.updateBatchOwner(payload.batchId, payload.toMSP);
-        await db.updateBatchStatus(payload.batchId, "TRANSFERRED");
-        break;
-      case "BATCH_STATUS_UPDATED":
-        await db.updateBatchStatus(payload.batchId, payload.newStatus);
-        break;
-      case "EVIDENCE_ADDED":
-        await db.updateEvidence(payload.batchId, payload.hash, payload.uri);
-        break;
+    @PostConstruct
+    public void init() throws Exception {
+        gateways.put("Org1", buildGateway("Org1",
+            "peer0.org1.example.com:7051"));
+        gateways.put("Org2", buildGateway("Org2",
+            "peer0.org2.example.com:9051"));
     }
-  }
+
+    private Gateway buildGateway(String org, String peerEndpoint)
+            throws Exception {
+        Credentials creds = loadCredentials(org);
+        ManagedChannel channel = ManagedChannelBuilder
+            .forTarget(peerEndpoint)
+            .useTransportSecurity()
+            .build();
+
+        return Gateway.newInstance()
+            .identity(Identities.newX509Identity(
+                org + "MSP", creds.getCertificate()))
+            .signer(Signers.newPrivateKeySigner(creds.getPrivateKey()))
+            .hash(Hash.SHA256)
+            .connection(channel)
+            .connect();
+    }
+
+    public byte[] submitTransaction(String org,
+            String fnName, String... args) throws Exception {
+        return getContract(org).submitTransaction(fnName, args);
+    }
+
+    public byte[] evaluateTransaction(String org,
+            String fnName, String... args) throws Exception {
+        // Không qua ordering service;
+        // peer trả dữ liệu trực tiếp từ world state
+        return getContract(org).evaluateTransaction(fnName, args);
+    }
+
+    private Contract getContract(String org) {
+        return gateways.get(org)
+            .getNetwork("coffee-traceability-channel")
+            .getContract("CoffeeTraceChaincode");
+    }
 }
 ```
 
-### 1.6 Transfer Flow Chi Tiết (2 Transaction Riêng Biệt)
+### 1.6 EventIndexerService.java
 
-```javascript
-// routes/transfer.js
+```java
+@Service
+public class EventIndexerService {
 
-// Bước 1: Org1 (Roaster) khởi tạo yêu cầu bàn giao
-router.post("/transfer/request", authenticate, async (req, res) => {
-  const { batchId, toMSP } = req.body;
-  // Backend dùng identity của Org1 để submit
-  // Endorsement policy: OR('Org1MSP.peer') — chỉ Org1 ký
-  const result = await fabricGateway.submitTransaction(
-    "Org1",
-    "requestTransfer",
-    batchId,
-    toMSP,
-  );
-  res.json(result);
-});
+    @Autowired FabricGatewayService    fabricGateway;
+    @Autowired BatchRepository         batchRepo;
+    @Autowired FarmActivityRepository  activityRepo;
+    @Autowired LedgerRefRepository     ledgerRefRepo;
 
-// Bước 2: Org2 (Packager) xác nhận nhận hàng
-router.post("/transfer/accept/:batchId", authenticate, async (req, res) => {
-  const { batchId } = req.params;
-  // Backend dùng identity của Org2 để submit
-  // Endorsement policy: AND('Org1MSP.peer', 'Org2MSP.peer')
-  // → Fabric tự yêu cầu cả 2 peer endorse trước khi commit
-  const result = await fabricGateway.submitTransaction(
-    "Org2",
-    "acceptTransfer",
-    batchId,
-  );
-  res.json(result);
-});
+    @PostConstruct
+    public void startListening() throws Exception {
+        Network network = fabricGateway
+            .getGateway("Org1")
+            .getNetwork("coffee-traceability-channel");
+
+        network.getChaincodeEvents("CoffeeTraceChaincode")
+               .forEach(this::handleEvent);
+    }
+
+    private void handleEvent(ChaincodeEvent event) {
+        Map<String, String> payload = parsePayload(event.getPayload());
+        String txId        = payload.get("txId");
+        String blockNumber = String.valueOf(event.getBlockNumber());
+
+        switch (event.getEventName()) {
+
+            case "BATCH_CREATED" -> {
+                // Event payload chỉ chứa fields quan trọng (batchId, type,
+                // ownerMSP...), không phải full snapshot (metadata, evidence...).
+                // Indexer gọi thêm evaluateTransaction(getBatch) để lấy
+                // toàn bộ world state trước khi upsert vào DB mirror.
+                String batchId = payload.get("batchId");
+                try {
+                    byte[] raw = fabricGateway.evaluateTransaction(
+                        "Org1", "getBatch", batchId
+                    );
+                    Batch fullBatch = JSON.deserialize(raw, Batch.class);
+                    batchRepo.upsert(fullBatch, txId, blockNumber);
+                } catch (Exception e) {
+                    // Fallback: upsert từ payload nếu evaluate lỗi
+                    batchRepo.upsertFromPayload(payload, txId, blockNumber);
+                    log.warn("evaluateTransaction failed for {}, "
+                        + "upserted from event payload", batchId, e);
+                }
+                ledgerRefRepo.save(payload.get("batchId"),
+                    "batchCreated", txId, blockNumber);
+            }
+
+            case "FARM_ACTIVITY_RECORDED" ->
+                // Chỉ tồn tại trong bảng này — không có trong world state
+                activityRepo.insert(FarmActivity.from(payload,
+                    txId, blockNumber));
+
+            case "TRANSFER_ACCEPTED" -> {
+                batchRepo.updateOwnerAndStatus(
+                    payload.get("batchId"),
+                    payload.get("toMSP"),
+                    "TRANSFERRED"
+                );
+                ledgerRefRepo.save(payload.get("batchId"),
+                    "transferAccepted", txId, blockNumber);
+            }
+
+            case "BATCH_STATUS_UPDATED" -> {
+                batchRepo.updateStatus(
+                    payload.get("batchId"),
+                    payload.get("newStatus")
+                );
+                ledgerRefRepo.save(payload.get("batchId"),
+                    "latestStatusUpdate", txId, blockNumber);
+            }
+
+            case "EVIDENCE_ADDED" ->
+                batchRepo.updateEvidence(
+                    payload.get("batchId"),
+                    payload.get("hash"),
+                    payload.get("uri")
+                );
+
+            case "TRANSFER_REQUESTED" ->
+                batchRepo.updateStatus(
+                    payload.get("batchId"), "TRANSFER_PENDING"
+                );
+        }
+    }
+}
 ```
 
-> **Tại sao 2 tx riêng thay vì offline signing?**
->
-> - `requestTransfer` chỉ đổi status = `TRANSFER_PENDING` → Org1 tự ký đủ
-> - `acceptTransfer` cần AND endorsement → Fabric tự thu thập endorsement
->   từ cả 2 peer khi backend submit qua Gateway SDK
-> - Không cần implement offline signing phức tạp
-> - Demo rõ ràng, ít bug, dễ giải thích khi bảo vệ
+### 1.7 TraceController.java
+
+```java
+@RestController
+@RequestMapping("/api")
+public class TraceController {
+
+    @GetMapping("/trace/{publicCode}")
+    public ResponseEntity<TraceResponse> getTrace(
+            @PathVariable String publicCode) {
+
+        List<Batch> chain = batchRepo.getChainByPublicCode(publicCode);
+        if (chain.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Batch harvestBatch = chain.get(chain.size() - 1);
+
+        List<FarmActivity> activities = activityRepo
+            .findByHarvestBatchId(harvestBatch.getBatchId());
+        activities.sort(Comparator
+            .comparing(FarmActivity::getActivityDate).reversed());
+
+        Map<String, LedgerRef> ledgerRefs = ledgerRefRepo
+            .findByBatchId(chain.get(0).getBatchId());
+
+        return ResponseEntity.ok(TraceResponse.builder()
+            .publicCode(publicCode)
+            .chain(chain)
+            .farmActivities(activities)
+            .verifiedOnChain(true)
+            // verifiedOnChain = true: dữ liệu được index từ
+            // chaincode events + world state snapshot qua
+            // evaluateTransaction. ledgerRefs cung cấp txId +
+            // blockNumber để đối chiếu trực tiếp trên explorer.
+            .ledgerRefs(ledgerRefs)
+            .build());
+    }
+}
+```
+
+### 1.8 TransferController.java
+
+```java
+@RestController
+@RequestMapping("/api/transfer")
+public class TransferController {
+
+    // Bước 1: Org1 — OR('Org1MSP.peer')
+    @PostMapping("/request")
+    public ResponseEntity<?> requestTransfer(
+            @RequestBody TransferRequest req) throws Exception {
+        byte[] result = fabricGateway.submitTransaction(
+            "Org1", "requestTransfer",
+            req.getBatchId(), req.getToMSP()
+        );
+        return ResponseEntity.ok(parseResult(result));
+    }
+
+    // Bước 2: Org2 — AND('Org1MSP.peer', 'Org2MSP.peer')
+    // Fabric Gateway SDK tự gom endorsement từ cả 2 peer
+    @PostMapping("/accept/{batchId}")
+    public ResponseEntity<?> acceptTransfer(
+            @PathVariable String batchId) throws Exception {
+        byte[] result = fabricGateway.submitTransaction(
+            "Org2", "acceptTransfer", batchId
+        );
+        return ResponseEntity.ok(parseResult(result));
+    }
+}
+```
 
 ---
 
@@ -201,91 +317,115 @@ router.post("/transfer/accept/:batchId", authenticate, async (req, res) => {
 ### 2.1 Cấu Trúc Trang
 
 ```
-/login                       — Đăng nhập, chọn role
-/dashboard                   — Redirect theo role sau login
+/login
+/dashboard                       → redirect theo role
 
-/dashboard/farmer            — Tạo HarvestBatch
-/dashboard/processor         — Tạo ProcessedBatch + xem lô chờ xử lý
-/dashboard/roaster           — Tạo RoastBatch + xem lô chờ rang
-/dashboard/packager          — Nhận lô rang + tạo PackagedBatch + tạo QR
-/dashboard/retailer          — Xác nhận nhận hàng → IN_STOCK → SOLD
+/dashboard/farmer
+  ├── Tạo HarvestBatch
+  ├── Nhật ký canh tác (xem + thêm activity)
+  └── CREATED → IN_PROCESS → COMPLETED
 
-/trace/:publicCode           — Trang truy xuất CÔNG KHAI (không cần login)
+/dashboard/processor
+  ├── HarvestBatch COMPLETED → tạo ProcessedBatch
+  └── CREATED → IN_PROCESS → COMPLETED → requestTransfer
+
+/dashboard/roaster
+  ├── ProcessedBatch COMPLETED → tạo RoastBatch
+  ├── Upload chứng cứ
+  └── CREATED → IN_PROCESS → COMPLETED → requestTransfer sang Org2
+
+/dashboard/packager
+  ├── RoastBatch TRANSFER_PENDING → acceptTransfer
+  ├── Tạo PackagedBatch (status = COMPLETED ngay)
+  └── Sinh QR code
+
+/dashboard/retailer
+  ├── PackagedBatch TRANSFERRED → IN_STOCK → SOLD
+
+/trace/{publicCode}              → CÔNG KHAI
 ```
 
-### 2.2 Trang Truy Xuất Công Khai (/trace/:publicCode)
+### 2.2 Trang Truy Xuất Công Khai
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  ☕ TRUY XUẤT NGUỒN GỐC CÀ PHÊ                      │
-│  Mã sản phẩm: PKG-20240403-001                       │
-├─────────────────────────────────────────────────────┤
+┌────────────────────────────────────────────────────────┐
+│  ☕ TRUY XUẤT NGUỒN GỐC CÀ PHÊ                         │
+│  Mã: PKG-20240403-001  |  ✅ Đã bán                    │
+├────────────────────────────────────────────────────────┤
+│  ✅ [04/04] BÁN LẺ      Retailer XYZ                   │
+│  📦 [03/04] ĐÓNG GÓI   Org2 — Đà Lạt Coffee           │
+│  🔥 [01/04] RANG        Org1 — Roastery Cầu Đất        │
+│             📎 Giấy kiểm định  [🔍 Xác minh hash]      │
+│  🌿 [25/03] SƠ CHẾ     Org1 — Washed                  │
+│  🌱 [15/03] THU HOẠCH  farmer_alice — Cầu Đất         │
+│  └─ 🌾 NHẬT KÝ CANH TÁC [▼]                           │
+│       [01/03] 🐛 Phun thuốc  [tx↗]                     │
+│       [15/02] 🌿 Bón phân    [tx↗]                     │
+│       [01/02] 🚿 Tưới nước   [tx↗]                     │
+│       [10/01] ✂️  Tỉa cành   [tx↗]                     │
+│  ────────────────────────────────────────────────────  │
+│  🔗 Nguồn: Hyperledger Fabric ledger events            │
+│  Block #1247 | Tx: abc123...                           │
+└────────────────────────────────────────────────────────┘
+```
+
+### 2.3 EvidenceVerifier Component
+
+```
+┌──────────────────────────────────────────────────────┐
+│  🔍 XÁC MINH TÍNH TOÀN VẸN FILE CHỨNG CỨ            │
 │                                                      │
-│  ✅ [04/04/2024] BÁN LẺ                              │
-│     Cửa hàng: Retailer XYZ — Đà Lạt                 │
-│     Trạng thái: Đã bán                               │
+│  On-chain hash (từ getTraceChain — world state):     │
+│  a3f8c2d1e5b7...9f4a                                 │
 │                                                      │
-│  📦 [03/04/2024] ĐÓNG GÓI                            │
-│     Đơn vị: Đà Lạt Coffee Packager (Org2MSP)        │
-│     Trọng lượng: 250g × 100 gói                     │
-│     Hạn sử dụng: 03/04/2025                         │
+│  Computed hash (SHA-256 tính từ file tải về):        │
+│  a3f8c2d1e5b7...9f4a                                 │
 │                                                      │
-│  🔥 [01/04/2024] RANG CÀ PHÊ                         │
-│     Đơn vị: Roastery Cầu Đất (Org1MSP)              │
-│     Profile rang: Medium-Light — 12 phút            │
-│     [📎 Xem giấy kiểm định]  [🔍 Verify hash]       │
-│                                                      │
-│  🌿 [25/03/2024] SƠ CHẾ                              │
-│     Phương pháp: Washed                             │
-│     Thời gian: 18/03 – 25/03/2024                   │
-│     Cơ sở: Xưởng sơ chế Đà Lạt                     │
-│                                                      │
-│  🌱 [15/03/2024] THU HOẠCH                           │
-│     Vùng trồng: Cầu Đất, Đà Lạt, Lâm Đồng         │
-│     Giống cà phê: Arabica Bourbon                   │
-│     Nông dân: farmer_alice (Org1MSP)                │
-│                                                      │
-│  ──────────────────────────────────────────────────  │
-│  🔗 Dữ liệu xác thực trên Hyperledger Fabric        │
-│  Tx: abc123... │ Block #1247                         │
-└─────────────────────────────────────────────────────┘
+│  ✅ KHỚP — File nguyên bản, chưa bị chỉnh sửa       │
+│  Tx: abc123... | Block #1250                        │
+└──────────────────────────────────────────────────────┘
+```
+
+> Hash on-chain lấy từ `evaluateTransaction(getBatch)` —
+> trực tiếp từ world state, độc lập với DB off-chain.
+
+```typescript
+async function verifyEvidence(batchId: string, fileUrl: string) {
+  // 1. Lấy hash on-chain từ world state (không phải DB)
+  const batch        = await api.evaluateGetBatch(batchId);
+  const onChainHash  = batch.evidenceHash;
+
+  // 2. Tính hash phía client
+  const fileBuffer   = await downloadFile(fileUrl);
+  const computedHash = await sha256(fileBuffer);
+
+  return {
+    onChainHash,   // hiển thị dòng 1
+    computedHash,  // hiển thị dòng 2
+    match: onChainHash === computedHash,
+  };
+}
 ```
 
 ---
 
 ## 3. QR Code
 
-### 3.1 Nội Dung QR
-
-```
-https://trace.example.com/trace/PKG-20240403-001
-```
-
-QR chứa URL — không nhúng data trực tiếp:
-
-- QR gọn, in được trên bao bì nhỏ
-- Logic hiển thị thay đổi không cần in lại QR
-- Luôn trả về data mới nhất từ backend
-
-### 3.2 Sinh QR Trong Backend
-
-```javascript
-// qrGenerator.js
-const QRCode = require("qrcode");
-
-async function generateQR(publicCode) {
-  const url = `https://trace.example.com/trace/${publicCode}`;
-
-  const qrBuffer = await QRCode.toBuffer(url, {
-    errorCorrectionLevel: "M", // chịu được vết xước vừa
-    width: 300,
-    margin: 2,
-    color: { dark: "#1a1a1a", light: "#ffffff" },
-  });
-
-  const filename = `${publicCode}.png`;
-  await saveFile(`./qr/${filename}`, qrBuffer);
-  return `/api/qr/${publicCode}`; // URL trả về cho frontend
+```java
+@Service
+public class QrGeneratorService {
+    public byte[] generateQR(String publicCode) throws Exception {
+        String url = "https://trace.example.com/trace/" + publicCode;
+        BitMatrix matrix = new MultiFormatWriter().encode(
+            url, BarcodeFormat.QR_CODE, 300, 300,
+            Map.of(EncodeHintType.ERROR_CORRECTION,
+                   ErrorCorrectionLevel.M,
+                   EncodeHintType.MARGIN, 2)
+        );
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        MatrixToImageWriter.writeToStream(matrix, "PNG", out);
+        return out.toByteArray();
+    }
 }
 ```
 
@@ -293,31 +433,18 @@ async function generateQR(publicCode) {
 
 ## 4. File Chứng Cứ (Evidence)
 
-### 4.1 Quy Trình Đầy Đủ
-
-```
-1. User chọn file (PDF/JPG/PNG) trên Dashboard
-2. POST /api/evidence/upload
-   → Backend nhận file
-   → Tính SHA-256: crypto.createHash('sha256').update(buffer).digest('hex')
-   → Upload lên IPFS → nhận CID
-   → Trả về { hash: "abc123...", uri: "ipfs://QmXyz..." }
-3. Frontend nhận hash + uri
-4. Gọi POST /api/batch/:batchId/evidence với { hash, uri }
-5. Backend submit addEvidence(batchId, hash, uri) lên Fabric
-6. Chaincode lưu evidenceHash + evidenceUri vào Batch state
-7. Emit event EVIDENCE_ADDED
-```
-
-### 4.2 Verify Tính Toàn Vẹn (Người Dùng)
-
-```
-1. Click "Verify hash" trên trang /trace/...
-2. Download file từ IPFS URI
-3. Frontend tính SHA-256 của file vừa tải
-4. So sánh với evidenceHash lưu on-chain
-   ✅ Khớp → File nguyên bản, không bị chỉnh sửa
-   ❌ Không khớp → File đã bị thay thế
+```java
+@Service
+public class EvidenceService {
+    public EvidenceResult uploadEvidence(MultipartFile file)
+            throws Exception {
+        byte[] bytes = file.getBytes();
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        String hash = HexFormat.of().formatHex(digest.digest(bytes));
+        String cid  = ipfsClient.add(bytes).getCid();
+        return new EvidenceResult(hash, "ipfs://" + cid);
+    }
+}
 ```
 
 ---
@@ -325,95 +452,74 @@ async function generateQR(publicCode) {
 ## 5. Docker Compose (Demo)
 
 ```yaml
-# docker-compose.yml
-version: "3.8"
-
+version: '3.8'
 services:
-  # ── Fabric Infrastructure ──────────────────────────────────
 
   orderer.example.com:
     image: hyperledger/fabric-orderer:2.5
     environment:
-      - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
-      - ORDERER_GENERAL_CONSENSUS_TYPE=etcdraft # Raft
-    volumes:
-      - ./network/crypto-config/ordererOrganizations:/var/hyperledger/orderer/msp
-    ports:
-      - "7050:7050"
+      - ORDERER_GENERAL_CONSENSUS_TYPE=etcdraft
+    ports: ["7050:7050"]
 
   peer0.org1.example.com:
     image: hyperledger/fabric-peer:2.5
     environment:
       - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
       - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb0:5984
-    depends_on:
-      - couchdb0
-    ports:
-      - "7051:7051"
+    depends_on: [couchdb0]
+    ports: ["7051:7051"]
 
   peer0.org2.example.com:
     image: hyperledger/fabric-peer:2.5
     environment:
       - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
       - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb1:5984
-    depends_on:
-      - couchdb1
-    ports:
-      - "9051:9051"
+    depends_on: [couchdb1]
+    ports: ["9051:9051"]
 
-  couchdb0: # State DB của peer0.org1
+  couchdb0:
     image: couchdb:3.3
-    ports:
-      - "5984:5984"
+    ports: ["5984:5984"]
 
-  couchdb1: # State DB của peer0.org2
+  couchdb1:
     image: couchdb:3.3
-    ports:
-      - "7984:5984"
+    ports: ["7984:5984"]
 
   ca.org1.example.com:
     image: hyperledger/fabric-ca:1.5
-    environment:
-      - FABRIC_CA_HOME=/etc/hyperledger/fabric-ca-server
-    # Cấp cert với attribute role=FARMER/PROCESSOR/ROASTER
-    ports:
-      - "7054:7054"
+    ports: ["7054:7054"]
 
   ca.org2.example.com:
     image: hyperledger/fabric-ca:1.5
-    # Cấp cert với attribute role=PACKAGER/RETAILER
-    ports:
-      - "8054:7054"
-
-  # ── Application Layer ──────────────────────────────────────
+    ports: ["8054:7054"]
 
   backend:
     build: ./backend
     environment:
-      - ORG1_PEER=peer0.org1.example.com:7051
-      - ORG2_PEER=peer0.org2.example.com:9051
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/coffeetrace
       - CHANNEL_NAME=coffee-traceability-channel
       - CHAINCODE_NAME=CoffeeTraceChaincode
-    ports:
-      - "3000:3000"
+    ports: ["8080:8080"]
     depends_on:
       - peer0.org1.example.com
       - peer0.org2.example.com
+      - postgres
+
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=coffeetrace
+      - POSTGRES_PASSWORD=secret
+    ports: ["5432:5432"]
 
   frontend:
     build: ./frontend
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:3000
-    ports:
-      - "8080:8080"
-    depends_on:
-      - backend
+    ports: ["3000:3000"]
+    depends_on: [backend]
 
-  ipfs: # Local IPFS node (optional)
+  ipfs:
     image: ipfs/kubo:latest
-    ports:
-      - "5001:5001" # API
-      - "8081:8080" # Gateway
+    ports: ["5001:5001", "8081:8080"]
 ```
 
 ---
@@ -421,58 +527,49 @@ services:
 ## 6. Cấu Trúc Thư Mục Dự Án
 
 ```
-CoffeeChain/
+coffee-traceability/
 │
-├── network/                         # Fabric network config
-│   ├── configtx.yaml                # Channel profile + endorsement policy
-│   ├── crypto-config.yaml           # Org, peer, CA, user definitions
+├── network/
+│   ├── configtx.yaml
+│   ├── crypto-config.yaml
 │   ├── docker-compose.yaml
 │   └── scripts/
-│       ├── setup-network.sh         # Tạo channel, join peer, anchor peer
-│       ├── deploy-chaincode.sh      # Package → install → approve → commit
-│       └── register-users.sh        # Đăng ký user với role attribute
+│       ├── setup-network.sh
+│       ├── deploy-chaincode.sh
+│       └── register-users.sh
 │
-├── chaincode/                       # Java chaincode
+├── chaincode/
 │   ├── src/main/java/
 │   │   ├── CoffeeTraceChaincode.java
-│   │   ├── model/
-│   │   │   ├── Batch.java           # Có field docType = "batch"
-│   │   │   └── BatchEvent.java
+│   │   ├── model/Batch.java
 │   │   └── util/
-│   │       ├── RoleChecker.java     # Đọc role từ cert attribute
-│   │       └── LedgerUtils.java     # generateBatchId (UUID), now()
+│   │       ├── RoleChecker.java
+│   │       └── LedgerUtils.java
 │   └── build.gradle
 │
-├── backend/                         # Node.js API server + indexer
-│   ├── src/
-│   │   ├── app.js
-│   │   ├── routes/
-│   │   │   ├── trace.js             # GET /trace/:publicCode (public)
-│   │   │   ├── batches.js           # POST harvest/process/roast/package
-│   │   │   ├── transfer.js          # POST transfer/request + accept
-│   │   │   └── evidence.js          # Upload + addEvidence
-│   │   ├── services/
-│   │   │   ├── fabricGateway.js     # Gateway SDK connection + submitTx
-│   │   │   ├── indexer.js           # Event listener → DB off-chain
-│   │   │   └── qrGenerator.js       # Sinh QR PNG
-│   │   └── db/
-│   │       └── models.js            # PostgreSQL schema (batch index)
-│   └── package.json
+├── backend/
+│   ├── src/main/java/com/coffee/trace/
+│   │   ├── controller/
+│   │   ├── service/
+│   │   ├── repository/
+│   │   ├── model/
+│   │   └── config/
+│   └── pom.xml
 │
-├── frontend/                        # React / Next.js
+├── frontend/
 │   ├── src/
 │   │   ├── pages/
-│   │   │   ├── trace/
-│   │   │   │   └── [publicCode].jsx # Public trace page
+│   │   │   ├── trace/[publicCode].tsx
 │   │   │   └── dashboard/
-│   │   │       ├── farmer.jsx
-│   │   │       ├── processor.jsx
-│   │   │       ├── roaster.jsx
-│   │   │       ├── packager.jsx
-│   │   │       └── retailer.jsx
+│   │   │       ├── farmer.tsx
+│   │   │       ├── processor.tsx
+│   │   │       ├── roaster.tsx
+│   │   │       ├── packager.tsx
+│   │   │       └── retailer.tsx
 │   │   └── components/
-│   │       ├── TraceTimeline.jsx    # Timeline UI component
-│   │       └── EvidenceVerifier.jsx # Hash verify component
+│   │       ├── TraceTimeline.tsx
+│   │       ├── FarmActivityLog.tsx
+│   │       └── EvidenceVerifier.tsx
 │   └── package.json
 │
 └── docs/
