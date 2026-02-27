@@ -495,7 +495,8 @@ public class CoffeeTraceChaincode implements ContractInterface {
     public Batch createProcessedBatch(Context ctx,
             String publicCode, String parentBatchId,
             String processingMethod, String startDate,
-            String endDate, String weightKg) {
+            String endDate, String facilityName, String weightKg) {
+        // FIX-03: thêm facilityName cho nhất quán với metadata PROCESSED
 
         RoleChecker.require(ctx, "PROCESSOR");
         checkPublicCodeUnique(ctx, publicCode);
@@ -503,9 +504,10 @@ public class CoffeeTraceChaincode implements ContractInterface {
 
         Batch b = buildBatch(ctx, publicCode, "PROCESSED", parentBatchId,
             Map.of("processingMethod", processingMethod,
-                   "startDate", startDate,
-                   "endDate",   endDate,
-                   "weightKg",  weightKg));
+                   "startDate",    startDate,
+                   "endDate",      endDate,
+                   "facilityName", facilityName,
+                   "weightKg",     weightKg));
 
         ctx.getStub().putState(b.getBatchId(), JSON.serialize(b));
         ctx.getStub().setEvent("BATCH_CREATED", buildBatchPayload(ctx, b));
@@ -537,14 +539,17 @@ public class CoffeeTraceChaincode implements ContractInterface {
     public Batch createPackagedBatch(Context ctx,
             String publicCode, String parentBatchId,
             String packageWeight, String packageCount,
-            String packagedDate, String expiryDate) {
+            String packagedDate, String expiryDate,
+            String qrBaseUrl) {
+        // FIX-01: qrBaseUrl truyền từ backend (${TRACE_PUBLIC_BASE_URL})
+        //         thay vì hard-code "https://trace.example.com/trace/"
 
         RoleChecker.require(ctx, "PACKAGER");
         // PACKAGER → Org2MSP đã được verify trong RoleChecker
         checkPublicCodeUnique(ctx, publicCode);
         LedgerUtils.validateParentReady(ctx, parentBatchId, "ROAST");
 
-        String qrUrl = "https://trace.example.com/trace/" + publicCode;
+        String qrUrl = qrBaseUrl + publicCode;
         Batch b = buildBatch(ctx, publicCode, "PACKAGED", parentBatchId,
             Map.of("packageWeight", packageWeight,
                    "packageCount",  packageCount,
