@@ -2,13 +2,13 @@
 
 ## 1. Vai Trò & Giới Hạn
 
-| Backend làm được | Backend KHÔNG làm được |
-|---|---|
-| Submit transaction lên Fabric | Sửa transaction đã commit |
-| Index và cache event | Xóa dữ liệu trên ledger |
-| Cung cấp REST API | Thay đổi world state trực tiếp |
-| Upload file, tính SHA-256, lưu IPFS | Giả mạo identity org khác |
-| Tạo & trả QR code | Bypass endorsement / SBE policy |
+| Backend làm được                    | Backend KHÔNG làm được          |
+| ----------------------------------- | ------------------------------- |
+| Submit transaction lên Fabric       | Sửa transaction đã commit       |
+| Index và cache event                | Xóa dữ liệu trên ledger         |
+| Cung cấp REST API                   | Thay đổi world state trực tiếp  |
+| Upload file, tính SHA-256, lưu IPFS | Giả mạo identity org khác       |
+| Tạo & trả QR code                   | Bypass endorsement / SBE policy |
 
 > **Blockchain là source of truth duy nhất.**
 
@@ -221,18 +221,27 @@ public class EventIndexerService {
         LoggerFactory.getLogger(EventIndexerService.class);
 
     /**
-     * V1: subscribe từ block mới nhất, không checkpoint.
+     * Trade-off đã chấp nhận (demo): subscribe từ block mới nhất,
+     * không checkpoint lastIndexedBlock xuống DB.
      *
-     * Limitation: nếu indexer down đúng lúc event bắn ra
+     * Rủi ro: nếu indexer restart đúng lúc event bắn ra
      * (đặc biệt FARM_ACTIVITY_RECORDED — event-only, không có
-     * world state backup), DB off-chain sẽ thiếu record.
+     * world state backup), bảng farm_activities sẽ thiếu record.
      * Ledger vẫn đúng, nhưng UI timeline thiếu activity.
      *
-     * V2 plan: lưu lastIndexedBlock vào bảng indexer_state sau
-     * mỗi block xử lý thành công. Khi restart, replay từ
-     * (lastIndexedBlock + 1) để không bỏ sót event nào.
-     * farm_activities có thể được recover hoàn toàn vì event
-     * vẫn còn trong ledger history.
+     * ✅ Demo: không restart indexer trong khi demo → trade-off OK.
+     *
+     * Checkpoint pattern (V2 / production):
+     *   1. Thêm bảng: CREATE TABLE indexer_state (
+     *          key VARCHAR PRIMARY KEY, value VARCHAR);
+     *      INSERT INTO indexer_state VALUES ('lastIndexedBlock', '0');
+     *   2. Khi init: đọc lastIndexedBlock từ DB → khởi đầu replay từ đó.
+     *   3. Sau mỗi block thành công: UPDATE indexer_state
+     *          SET value = :block WHERE key = 'lastIndexedBlock';
+     *   4. Subscribe với startBlock = lastIndexedBlock + 1:
+     *      network.getChaincodeEvents(chaincodeName,
+     *          new Checkpointer(startBlock))  // Fabric Gateway SDK hỗ trợ
+     *   → farm_activities recover hoàn toàn vì event còn trong ledger history.
      */
     private volatile long lastIndexedBlock = 0;
 
@@ -260,7 +269,8 @@ public class EventIndexerService {
                     events.forEachRemaining(event -> {
                         handleEvent(event);
                         lastIndexedBlock = event.getBlockNumber();
-                        // V2: persist lastIndexedBlock vào DB ở đây
+                        // V2/Production: UPDATE indexer_state SET value = lastIndexedBlock
+                        // WHERE key = 'lastIndexedBlock' để checkpoint sau mỗi block.
                     });
                 }
                 log.warn("EventIndexer: stream ended, retry in {}s",
@@ -416,7 +426,7 @@ server:
 
 spring:
   datasource:
-    url:      jdbc:postgresql://localhost:5432/coffeetrace
+    url: jdbc:postgresql://localhost:5432/coffeetrace
     username: coffeetrace
     password: ${DB_PASSWORD}
   jpa:
@@ -424,22 +434,22 @@ spring:
       ddl-auto: validate
 
 fabric:
-  channel-name:   coffee-traceability-channel
+  channel-name: coffee-traceability-channel
   chaincode-name: CoffeeTraceChaincode
   org1:
-    msp-id:           Org1MSP
-    peer-endpoint:    peer0.org1.example.com:7051
-    tls-cert-path:    /crypto/org1/tlsca.org1.example.com-cert.pem
-    admin-cert-path:  /crypto/org1/users/Admin@org1.example.com/msp/signcerts/cert.pem
-    admin-key-path:   /crypto/org1/users/Admin@org1.example.com/msp/keystore/
-    users-base-path:  /crypto/org1/users
+    msp-id: Org1MSP
+    peer-endpoint: peer0.org1.example.com:7051
+    tls-cert-path: /crypto/org1/tlsca.org1.example.com-cert.pem
+    admin-cert-path: /crypto/org1/users/Admin@org1.example.com/msp/signcerts/cert.pem
+    admin-key-path: /crypto/org1/users/Admin@org1.example.com/msp/keystore/
+    users-base-path: /crypto/org1/users
   org2:
-    msp-id:           Org2MSP
-    peer-endpoint:    peer0.org2.example.com:9051
-    tls-cert-path:    /crypto/org2/tlsca.org2.example.com-cert.pem
-    admin-cert-path:  /crypto/org2/users/Admin@org2.example.com/msp/signcerts/cert.pem
-    admin-key-path:   /crypto/org2/users/Admin@org2.example.com/msp/keystore/
-    users-base-path:  /crypto/org2/users
+    msp-id: Org2MSP
+    peer-endpoint: peer0.org2.example.com:9051
+    tls-cert-path: /crypto/org2/tlsca.org2.example.com-cert.pem
+    admin-cert-path: /crypto/org2/users/Admin@org2.example.com/msp/signcerts/cert.pem
+    admin-key-path: /crypto/org2/users/Admin@org2.example.com/msp/keystore/
+    users-base-path: /crypto/org2/users
 
 ipfs:
   api-url: http://localhost:5001
@@ -451,8 +461,9 @@ trace:
 
 jwt:
   secret: ${JWT_SECRET:coffee-chain-demo-secret-key-at-least-32chars}
-  expiration-ms: 86400000   # 24 hours
+  expiration-ms: 86400000 # 24 hours
 ```
+
 ---
 
 ## 7. FabricConfig.java
@@ -1038,7 +1049,7 @@ Bổ sung vào `application.yml` (thêm vào section hiện có):
 ```yaml
 jwt:
   secret: ${JWT_SECRET:coffee-chain-demo-secret-key-32chars}
-  expiration-ms: 86400000   # 24 hours
+  expiration-ms: 86400000 # 24 hours
 
 trace:
   public-base-url: ${TRACE_PUBLIC_BASE_URL:http://localhost:3000/trace/}
@@ -1047,7 +1058,7 @@ trace:
 
 ---
 
-## 11. Flyway Migration — V1__init_schema.sql
+## 11. Flyway Migration — V1\_\_init_schema.sql
 
 ```sql
 -- backend/src/main/resources/db/migration/V1__init_schema.sql

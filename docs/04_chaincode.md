@@ -23,6 +23,7 @@ package com.coffee.trace.chaincode.model;
 import org.hyperledger.fabric.contract.annotation.DataType;
 import org.hyperledger.fabric.contract.annotation.Property;
 import java.util.Map;
+import java.util.TreeMap;
 
 @DataType
 public class Batch {
@@ -39,7 +40,9 @@ public class Batch {
     @Property private String updatedAt;
     @Property private String evidenceHash;
     @Property private String evidenceUri;
-    @Property private Map<String, String> metadata;
+    // FIX-DETERMINISM: TreeMap → sorted keys → Gson serializes in consistent order
+    // across all peers → prevents "endorsement mismatch" byte diff.
+    @Property private TreeMap<String, String> metadata;
 
     public String getBatchId()                       { return batchId; }
     public void   setBatchId(String v)               { this.batchId = v; }
@@ -67,8 +70,11 @@ public class Batch {
     public void   setEvidenceHash(String v)          { this.evidenceHash = v; }
     public String getEvidenceUri()                   { return evidenceUri; }
     public void   setEvidenceUri(String v)           { this.evidenceUri = v; }
-    public Map<String, String> getMetadata()         { return metadata; }
-    public void   setMetadata(Map<String, String> v) { this.metadata = v; }
+    public TreeMap<String, String> getMetadata()              { return metadata; }
+    // Setter wraps in TreeMap → sorted keys regardless of caller's map type.
+    public void setMetadata(Map<String, String> v) {
+        this.metadata = (v != null) ? new TreeMap<>(v) : new TreeMap<>();
+    }
 }
 ```
 
@@ -463,6 +469,9 @@ public class CoffeeTraceChaincode implements ContractInterface {
         b.setEvidenceUri("");
         b.setCreatedAt(LedgerUtils.now(ctx));
         b.setUpdatedAt(LedgerUtils.now(ctx));
+        // Setter accepts Map but internally wraps in TreeMap (see Batch.java).
+        // TreeMap sorts keys alphabetically before Gson serialization →
+        // every peer produces identical bytes → no endorsement mismatch.
         b.setMetadata(metadata);
         return b;
     }
@@ -752,9 +761,17 @@ public class CoffeeTraceChaincode implements ContractInterface {
 
     @Transaction(intent = Transaction.TYPE.EVALUATE)
     public String getTraceChain(Context ctx, String startBatchId) {
-        List<Batch> chain = new ArrayList<>();
-        String currentId  = startBatchId;
+        List<Batch> chain   = new ArrayList<>();
+        // FIX-CYCLE: visited set guards against infinite loop if parentBatchId
+        // ever forms a cycle due to a data bug or incorrect input.
+        Set<String> visited = new HashSet<>();
+        String currentId    = startBatchId;
         while (currentId != null && !currentId.isEmpty()) {
+            if (visited.contains(currentId)) {
+                throw new ChaincodeException(
+                    "Cycle detected in trace chain at batchId: " + currentId);
+            }
+            visited.add(currentId);
             byte[] data = ctx.getStub().getState(currentId);
             if (data == null || data.length == 0) break;
             Batch b = JSON.deserialize(data, Batch.class);
@@ -802,8 +819,10 @@ public class CoffeeTraceChaincode implements ContractInterface {
      *      → Fabric MVCC sẽ detect conflict và reject 1 trong 2 tx.
      *   B) Dùng publicCode làm key chính thay cho batchId.
      *
-     * Demo: rich query đủ dùng. CouchDB index bắt buộc phải có
-     * (xem META-INF/statedb/couchdb/indexes/) để tránh full scan.
+     * Demo: rich query đủ dùng.
+     * ✅ CouchDB index ĐÃ có tại META-INF/statedb/couchdb/indexes/indexPublicCode.json
+     *    (xem Section 7 bên dưới). Fabric tự deploy cùng chaincode package
+     *    → không full scan, peer log không còn warning "CouchDB index warning".
      */
     private void checkPublicCodeUnique(Context ctx, String publicCode) {
         String query = String.format(
@@ -849,27 +868,27 @@ Fabric tự động deploy các file này cùng chaincode package.
 ```json name=chaincode/src/main/resources/META-INF/statedb/couchdb/indexes/indexPublicCode.json
 {
   "index": { "fields": ["docType", "publicCode"] },
-  "ddoc":  "indexPublicCodeDoc",
-  "name":  "indexPublicCode",
-  "type":  "json"
+  "ddoc": "indexPublicCodeDoc",
+  "name": "indexPublicCode",
+  "type": "json"
 }
 ```
 
 ```json name=chaincode/src/main/resources/META-INF/statedb/couchdb/indexes/indexStatus.json
 {
   "index": { "fields": ["docType", "status"] },
-  "ddoc":  "indexStatusDoc",
-  "name":  "indexStatus",
-  "type":  "json"
+  "ddoc": "indexStatusDoc",
+  "name": "indexStatus",
+  "type": "json"
 }
 ```
 
 ```json name=chaincode/src/main/resources/META-INF/statedb/couchdb/indexes/indexOwnerMSP.json
 {
   "index": { "fields": ["docType", "ownerMSP"] },
-  "ddoc":  "indexOwnerMSPDoc",
-  "name":  "indexOwnerMSP",
-  "type":  "json"
+  "ddoc": "indexOwnerMSPDoc",
+  "name": "indexOwnerMSP",
+  "type": "json"
 }
 ```
 
