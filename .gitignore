@@ -1,3 +1,65 @@
+# AI-DLC internal (không commit rule engine)
 .aidlc-rule-details/
 .copilot/
 aidlc-docs/
+
+# ──────────────────────────────────────────────────────────
+# SECRETS & CREDENTIALS — TUYỆT ĐỐI KHÔNG COMMIT
+# ──────────────────────────────────────────────────────────
+
+# Fabric crypto materials
+network/crypto-config/
+network/channel-artifacts/
+*.pem
+*_sk
+*.key
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.env.production
+
+# ──────────────────────────────────────────────────────────
+# JAVA / MAVEN / GRADLE
+# ──────────────────────────────────────────────────────────
+target/
+build/
+*.class
+*.jar
+*.war
+
+.gradle/
+!gradle-wrapper.jar
+!gradle-wrapper.properties
+
+.settings/
+.project
+.classpath
+.idea/
+*.iml
+
+# ──────────────────────────────────────────────────────────
+# NODE / NEXT.JS
+# ──────────────────────────────────────────────────────────
+node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+
+# Generated API client (regenerate từ openapi.yaml — chạy: npm run generate-api)
+frontend/src/lib/api/generated/
+
+*.log
+npm-debug.log*
+
+# ──────────────────────────────────────────────────────────
+# OS
+# ──────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ──────────────────────────────────────────────────────────
+# TEST OUTPUT
+# ──────────────────────────────────────────────────────────
+coverage/
