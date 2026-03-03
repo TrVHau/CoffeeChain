@@ -1,0 +1,29 @@
+plugins {
+    id 'java'
+    id 'com.gradleup.shadow' version '8.3.5'
+}
+
+group   = 'com.coffee.trace'
+version = '1.0.0'
+
+repositories {
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
+}
+
+dependencies {
+    implementation 'org.hyperledger.fabric-chaincode-java:fabric-chaincode-shim:2.5.0'
+    implementation 'com.google.code.gson:gson:2.10.1'
+}
+
+shadowJar {
+    archiveBaseName    = 'chaincode'
+    archiveVersion     = ''
+    archiveClassifier  = ''
+    mergeServiceFiles()
+    // Exclude duplicate module-info class files from merged JARs
+    exclude 'module-info.class'
+    manifest {
+        attributes 'Main-Class': 'org.hyperledger.fabric.contract.ContractRouter'
+    }
+}

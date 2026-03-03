@@ -16,8 +16,8 @@ public class JSON {
         return gson.fromJson(json, clazz);
     }
 
-    public static byte[] serializeMap(Map<String, Object> map) {
-        return serialize(map).getBytes(StandardCharsets.UTF_8);
+    public static byte[] serializeMap(Map<String, String> map) {
+        return gson.toJson(map).getBytes(StandardCharsets.UTF_8);
     }
 
     public static String toJson(Object obj) {
