@@ -47,7 +47,8 @@ public class FabricGatewayService {
         // Org-level gateways (Admin cert) — used for evaluate + event subscription
         for (String org : List.of("Org1", "Org2")) {
             try {
-                gatewayByOrg.put(org, buildGateway(org, loadAdminIdentity(org)));
+                IdentityWithKey id = loadAdminIdentity(org);
+                gatewayByOrg.put(org, buildGateway(org, id.identity(), id.privateKey()));
                 log.info("Org-level gateway initialized for {}", org);
             } catch (Exception e) {
                 log.warn("Could not initialize org gateway for {}: {}", org, e.getMessage());
@@ -59,7 +60,8 @@ public class FabricGatewayService {
                 "farmer_alice", "processor_bob", "roaster_charlie",
                 "packager_dave", "retailer_eve")) {
             try {
-                gatewayByUser.put(userId, buildGateway(orgOfUser(userId), loadUserIdentity(userId)));
+                IdentityWithKey id = loadUserIdentity(userId);
+                gatewayByUser.put(userId, buildGateway(orgOfUser(userId), id.identity(), id.privateKey()));
                 log.info("User-level gateway initialized for {}", userId);
             } catch (Exception e) {
                 log.warn("Could not load identity for {}: {}", userId, e.getMessage());
@@ -120,7 +122,7 @@ public class FabricGatewayService {
         return gw.getNetwork(channelName).getContract(chaincodeName);
     }
 
-    private Gateway buildGateway(String org, Identity identity) throws Exception {
+    private Gateway buildGateway(String org, Identity identity, PrivateKey privateKey) throws Exception {
         FabricConfig.OrgConfig cfg = fabricConfig.getOrgConfig(org);
         byte[] tlsCert = Files.readAllBytes(Paths.get(cfg.getTlsCertPath()));
         ManagedChannel channel = NettyChannelBuilder
@@ -131,28 +133,28 @@ public class FabricGatewayService {
                 .build();
         return Gateway.newInstance()
                 .identity(identity)
-                .signer(Signers.newPrivateKeySigner(((X509Identity) identity).getPrivateKey()))
+                .signer(Signers.newPrivateKeySigner(privateKey))
                 .hash(Hash.SHA256)
                 .connection(channel)
                 .connect();
     }
 
-    private Identity loadUserIdentity(String userId) throws Exception {
+    private IdentityWithKey loadUserIdentity(String userId) throws Exception {
         String org  = orgOfUser(userId);
         String base = fabricConfig.getOrgConfig(org).getUsersBasePath();
-        return Identities.newX509Identity(
-                mspIdOf(org),
-                loadCert(base + "/" + userId + "/msp/signcerts/cert.pem"),
-                loadKey(base  + "/" + userId + "/msp/keystore/"));
+        X509Certificate cert = loadCert(base + "/" + userId + "/msp/signcerts/cert.pem");
+        PrivateKey key = loadKey(base + "/" + userId + "/msp/keystore/");
+        return new IdentityWithKey(new X509Identity(mspIdOf(org), cert), key);
     }
 
-    private Identity loadAdminIdentity(String org) throws Exception {
+    private IdentityWithKey loadAdminIdentity(String org) throws Exception {
         FabricConfig.OrgConfig cfg = fabricConfig.getOrgConfig(org);
-        return Identities.newX509Identity(
-                mspIdOf(org),
-                loadCert(cfg.getAdminCertPath()),
-                loadKey(cfg.getAdminKeyPath()));
+        X509Certificate cert = loadCert(cfg.getAdminCertPath());
+        PrivateKey key = loadKey(cfg.getAdminKeyPath());
+        return new IdentityWithKey(new X509Identity(mspIdOf(org), cert), key);
     }
+
+    private record IdentityWithKey(Identity identity, PrivateKey privateKey) {}
 
     private X509Certificate loadCert(String path) throws Exception {
         try (Reader r = Files.newBufferedReader(Paths.get(path))) {
