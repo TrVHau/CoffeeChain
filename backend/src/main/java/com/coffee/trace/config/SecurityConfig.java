@@ -12,7 +12,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-
+// Lớp này cho spring security biết : rq nào được ra vào tự do , rq nào phải đăng nhâpj , dingf filter nào , có sesion hay k , cách mã hóa mật khẩu 
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity

@@ -13,9 +13,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.List;
-
+// Lớp này sẽ được gọi mỗi lần có request đến, nó sẽ kiểm tra header Authorization để xác thực JWT token và thiết lập SecurityContext nếu token hợp lệ.
 @Component
-public class JwtAuthFilter extends OncePerRequestFilter {
+public class JwtAuthFilter extends OncePerRequestFilter { // class once này của spring chỉ chạy 1 lần mỗi http request
 
     private final JwtService jwtService;
 
