@@ -1,0 +1,6 @@
+{
+  "index": { "fields": ["docType", "ownerMSP"] },
+  "ddoc": "indexOwnerMSPDoc",
+  "name": "indexOwnerMSP",
+  "type": "json"
+}

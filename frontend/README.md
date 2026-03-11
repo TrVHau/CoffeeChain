@@ -3,6 +3,8 @@
 Next.js 14 (App Router) — Giao diện người dùng cho hệ thống truy xuất nguồn gốc cà phê.  
 **Unit-5**: FE-Member-2 — Auth + Public Trace + API Integration Layer.
 
+> **Trạng thái**: Tuần 3 hoàn thành — `/trace` page, QrScanner, API client layer
+
 ---
 
 ## Yêu Cầu

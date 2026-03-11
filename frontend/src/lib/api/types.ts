@@ -1,11 +1,15 @@
 /**
- * Temporary manual types — sẽ được thay thế bằng generated code từ openapi.yaml
- * Chạy: npm run generate:api  (sau khi Unit-2 publish openapi.yaml)
- *
- * Source: docs/03_data_model.md
+ * Types aligned with openapi.yaml — Unit-2 v1.0.0 (merged)
+ * Schema source: backend/src/main/resources/openapi.yaml
+ * To regenerate from spec: npm run generate:api
  */
 
-export type BatchType   = 'HARVEST' | 'PROCESSED' | 'ROAST' | 'PACKAGED';
+export type BatchType =
+  | 'HARVEST'
+  | 'PROCESSED'
+  | 'ROAST'
+  | 'PACKAGED';
+
 export type BatchStatus =
   | 'CREATED'
   | 'IN_PROCESS'
@@ -15,55 +19,67 @@ export type BatchStatus =
   | 'IN_STOCK'
   | 'SOLD';
 
+/** POST /api/auth/login → 200 */
+export interface AuthResponse {
+  token:  string;
+  userId: string;
+  role:   string;
+  org:    string;
+}
+
+/** Batch record returned from PostgreSQL index (GET /api/batches, /api/batch/{id}) */
 export interface BatchResponse {
   batchId:       string;
   publicCode:    string;
   type:          BatchType;
   status:        BatchStatus;
-  ownerMSP:      string;
+  parentBatchId: string | null;
+  ownerMsp:      string;          // Org1MSP | Org2MSP
   ownerUserId:   string;
-  parentBatchId: string;
-  pendingToMSP:  string;
-  createdAt:     string;
+  pendingToMsp:  string | null;
+  evidenceHash:  string | null;
+  evidenceUri:   string | null;
+  createdAt:     string;          // ISO-8601
   updatedAt:     string;
-  evidenceHash:  string;
-  evidenceUri:   string;
-  metadata:      Record<string, string>;
+  metadata?:     Record<string, string>; // jsonb from EventIndexer
 }
 
-export interface FarmActivity {
-  id:              number;
-  harvestBatchId:  string;
-  activityType:    string;
-  activityDate:    string;
-  note:            string;
-  evidenceHash:    string;
-  txId:            string;
-  blockNumber:     string;
+/** Farm activity from FARM_ACTIVITY_RECORDED event (EventIndexer) */
+export interface FarmActivityItem {
+  activityType: string;
+  activityDate: string;   // format: YYYY-MM-DD
+  note:         string;
+  evidenceHash: string;
+  evidenceUri:  string;
+  // Populated by EventIndexer — present if backend includes them
+  txId?:        string;
+  blockNumber?: string;
 }
 
-export interface LedgerRef {
-  batchId:     string;
-  eventType:   string;
+/** Fabric ledger event reference stored by EventIndexer */
+export interface LedgerRefItem {
+  eventName:   string;
   txId:        string;
-  blockNumber: string;
-  createdAt:   string;
+  blockNumber: number;
+  createdAt:   string;  // ISO-8601
 }
 
+/** GET /api/trace/{publicCode} → 200 */
+export interface TraceResponse {
+  batch:          BatchResponse;      // The queried batch (usually PACKAGED)
+  parentChain:    BatchResponse[];    // Parent batches oldest → newest
+  farmActivities: FarmActivityItem[];
+  ledgerRefs:     LedgerRefItem[];
+}
+
+/** Internal — used by TraceTimeline to represent a rendered step */
 export interface TraceStep {
-  type:          BatchType | 'RETAIL';
+  batchType:     BatchType;
   date:          string;
   actor:         string;
   metadata:      Record<string, string>;
   txId?:         string;
-  blockNum?:     string;
-  evidenceHash?: string;
-  evidenceUri?:  string;
-}
-
-export interface TraceResponse {
-  publicCode:     string;
-  chain:          BatchResponse[];
-  farmActivities: FarmActivity[];
-  ledgerRefs:     Record<string, LedgerRef>;
+  blockNumber?:  number;
+  evidenceHash?: string | null;
+  evidenceUri?:  string | null;
 }
