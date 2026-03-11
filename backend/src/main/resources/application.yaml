@@ -1,0 +1,54 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/coffeetrace
+    username: coffeetrace
+    password: ${DB_PASSWORD:coffeetrace}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+fabric:
+  channel-name: coffee-traceability-channel
+  chaincode-name: CoffeeTraceChaincode
+  org1:
+    msp-id: Org1MSP
+    peer-endpoint: peer0.org1.example.com:7051
+    tls-cert-path: /crypto/org1/tlsca.org1.example.com-cert.pem
+    admin-cert-path: /crypto/org1/users/Admin@org1.example.com/msp/signcerts/cert.pem
+    admin-key-path: /crypto/org1/users/Admin@org1.example.com/msp/keystore/
+    users-base-path: /crypto/org1/users
+  org2:
+    msp-id: Org2MSP
+    peer-endpoint: peer0.org2.example.com:9051
+    tls-cert-path: /crypto/org2/tlsca.org2.example.com-cert.pem
+    admin-cert-path: /crypto/org2/users/Admin@org2.example.com/msp/signcerts/cert.pem
+    admin-key-path: /crypto/org2/users/Admin@org2.example.com/msp/keystore/
+    users-base-path: /crypto/org2/users
+
+ipfs:
+  api-url: ${IPFS_API_URL:http://localhost:5001}
+
+trace:
+  public-base-url: ${TRACE_PUBLIC_BASE_URL:http://localhost:3000/trace/}
+
+jwt:
+  secret: ${JWT_SECRET:coffee-chain-demo-secret-key-at-least-32-chars!!}
+  expiration-ms: 86400000 # 24 hours
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html

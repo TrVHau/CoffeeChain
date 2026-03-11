@@ -63,3 +63,6 @@ Thumbs.db
 # TEST OUTPUT
 # ──────────────────────────────────────────────────────────
 coverage/
+
+# IDEs
+/.vscode
