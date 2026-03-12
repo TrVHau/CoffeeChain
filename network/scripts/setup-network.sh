@@ -32,6 +32,10 @@ echo "======================================================"
 # ── Step 1: Clean previous artifacts ──────────────────────
 echo ""
 echo "[1/6] Cleaning previous crypto and channel artifacts..."
+# Stop and remove OLD containers FIRST so that bind mounts are released.
+# Without this, re-running setup leaves stale containers bound to deleted inodes
+# (old /tmp/coffeechain-crypto), causing "admin-msp/keystore: no such file" errors.
+docker compose down -v --remove-orphans 2>/dev/null || true
 rm -rf crypto-config channel-artifacts
 mkdir -p channel-artifacts
 
@@ -64,6 +68,31 @@ configtxgen -profile TwoOrgsChannel \
 
 echo "  > Genesis block and channel artifacts ready."
 
+# ── NTFS fix: copy crypto material to /tmp (ext4) for reliable Docker bind mounts ──
+# The project is on NTFS (/media/...) — Docker bind mounts from NTFS may not expose
+# subdirectory structures (esp. keystore/) correctly. Copying to ext4 fixes this.
+echo "  > Copying crypto material to /tmp (ext4) for Docker compatibility..."
+CRYPTO_TMP="/tmp/coffeechain-crypto"
+ARTIFACTS_TMP="/tmp/coffeechain-artifacts"
+# Use sudo rm because Fabric CA container (root) may have written files owned by root
+sudo rm -rf "$CRYPTO_TMP" "$ARTIFACTS_TMP" 2>/dev/null || rm -rf "$CRYPTO_TMP" "$ARTIFACTS_TMP" 2>/dev/null || true
+cp -r ./crypto-config "$CRYPTO_TMP"
+cp -r ./channel-artifacts "$ARTIFACTS_TMP"
+
+# Copy orderer TLS CA cert into artifacts so peer containers can verify orderer TLS
+cp "$CRYPTO_TMP/ordererOrganizations/example.com/orderers/orderer.example.com/tls/ca.crt" \
+  "$ARTIFACTS_TMP/orderer-tls-ca.crt"
+
+ORDER_CA="/channel-artifacts/orderer-tls-ca.crt"
+ORDERER_CA="/channel-artifacts/orderer-tls-ca.crt"
+
+# Write .env so docker-compose picks up /tmp paths instead of NTFS paths
+cat > .env << ENV_EOF
+CRYPTO_BASE=$CRYPTO_TMP
+ARTIFACTS_BASE=$ARTIFACTS_TMP
+ENV_EOF
+echo "  > .env written: CRYPTO_BASE=$CRYPTO_TMP"
+
 # ── Step 4: Start Docker Compose ──────────────────────────
 echo "[4/6] Starting Docker Compose services..."
 docker compose up -d orderer.example.com couchdb0 couchdb1 \
@@ -76,20 +105,25 @@ sleep 15
 # ── Step 5: Create and join channel ───────────────────────
 echo "[5/6] Creating channel '$CHANNEL_NAME'..."
 
-# Create channel from Org1 peer
-docker exec peer0.org1.example.com peer channel create \
+# Create channel from Org1 peer — use Admin MSP for signing
+docker exec \
+  -e CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/admin-msp \
+  peer0.org1.example.com peer channel create \
   -o orderer.example.com:7050 \
   -c "$CHANNEL_NAME" \
   -f /channel-artifacts/channel.tx \
+  --outputBlock "/channel-artifacts/${CHANNEL_NAME}.block" \
   --tls \
-  --cafile /etc/hyperledger/fabric/tls/ca.crt
+  --cafile $ORDERER_CA
 
 # Wait for block to be committed
 sleep 3
 
 # Org1 joins
-docker exec peer0.org1.example.com peer channel join \
-  -b "/channel-artifacts/${CHANNEL_NAME}.block"
+docker exec \
+  -e CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/admin-msp \
+  peer0.org1.example.com \
+  peer channel join -b "/channel-artifacts/${CHANNEL_NAME}.block"
 
 # Copy channel block to Org2 peer container, then join
 docker cp "$(docker inspect --format='{{.Id}}' peer0.org1.example.com):/channel-artifacts/${CHANNEL_NAME}.block" \
@@ -99,16 +133,17 @@ docker cp "$(docker inspect --format='{{.Id}}' peer0.org1.example.com):/channel-
 docker exec \
   -e CORE_PEER_LOCALMSPID=Org2MSP \
   -e CORE_PEER_ADDRESS=peer0.org2.example.com:9051 \
-  -e CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp \
+  -e CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/admin-msp \
   peer0.org2.example.com \
   peer channel fetch 0 "/channel-artifacts/${CHANNEL_NAME}.block" \
   -o orderer.example.com:7050 \
   -c "$CHANNEL_NAME" \
   --tls \
-  --cafile /etc/hyperledger/fabric/tls/ca.crt
+  --cafile $ORDERER_CA
 
 docker exec \
   -e CORE_PEER_LOCALMSPID=Org2MSP \
+  -e CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/admin-msp \
   peer0.org2.example.com \
   peer channel join -b "/channel-artifacts/${CHANNEL_NAME}.block"
 
@@ -117,22 +152,25 @@ echo "  > Both peers joined channel."
 # ── Step 6: Update anchor peers ───────────────────────────
 echo "[6/6] Updating anchor peers..."
 
-docker exec peer0.org1.example.com peer channel update \
+docker exec \
+  -e CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/admin-msp \
+  peer0.org1.example.com peer channel update \
   -o orderer.example.com:7050 \
   -c "$CHANNEL_NAME" \
   -f /channel-artifacts/Org1MSPanchors.tx \
   --tls \
-  --cafile /etc/hyperledger/fabric/tls/ca.crt
+  --cafile $ORDERER_CA
 
 docker exec \
   -e CORE_PEER_LOCALMSPID=Org2MSP \
+  -e CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/admin-msp \
   peer0.org2.example.com \
   peer channel update \
   -o orderer.example.com:7050 \
   -c "$CHANNEL_NAME" \
   -f /channel-artifacts/Org2MSPanchors.tx \
   --tls \
-  --cafile /etc/hyperledger/fabric/tls/ca.crt
+  --cafile $ORDERER_CA
 
 echo ""
 echo "======================================================"

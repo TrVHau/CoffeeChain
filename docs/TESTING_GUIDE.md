@@ -1,135 +1,86 @@
-# CoffeeChain Backend — Hướng Dẫn Test Endpoint
+# CoffeeChain — Hướng Dẫn Test Endpoint (Postman / curl)
 
-> **Môi trường**: Docker Desktop + Postman  
 > **Backend URL**: `http://localhost:8080`  
-> **Swagger UI**: `http://localhost:8080/swagger-ui.html`
+> **Swagger UI**: `http://localhost:8080/swagger-ui.html`  
+> **Project path**: `/media/sagito/SHARED/WINDOW/BTL/ATBM/CoffeeChain`  
+> **Môi trường đã kiểm tra**: Ubuntu 22.04, Docker Engine 24+
 
 ---
 
 ## MỤC LỤC
 
-1. [Yêu cầu cài đặt](#1-yêu-cầu-cài-đặt)
-2. [Khởi động stack Docker](#2-khởi-động-stack-docker)
-3. [Thiết lập Postman](#3-thiết-lập-postman)
-4. [Tài khoản demo](#4-tài-khoản-demo)
-5. [Nhóm 1 — Auth (không cần Fabric)](#5-nhóm-1--auth-không-cần-fabric)
-6. [Nhóm 2 — Query & Read-model (không cần Fabric)](#6-nhóm-2--query--read-model-không-cần-fabric)
-7. [Nhóm 3 — Farmer endpoints (cần Fabric)](#7-nhóm-3--farmer-endpoints-cần-fabric)
-8. [Nhóm 4 — Processor endpoints (cần Fabric)](#8-nhóm-4--processor-endpoints-cần-fabric)
-9. [Nhóm 5 — Roaster + Transfer endpoints (cần Fabric)](#9-nhóm-5--roaster--transfer-endpoints-cần-fabric)
-10. [Nhóm 6 — Packager endpoints (cần Fabric)](#10-nhóm-6--packager-endpoints-cần-fabric)
-11. [Nhóm 7 — Retailer endpoints (cần Fabric)](#11-nhóm-7--retailer-endpoints-cần-fabric)
-12. [Nhóm 8 — Public Trace & QR (không cần Fabric, không cần auth)](#12-nhóm-8--public-trace--qr-không-cần-fabric-không-cần-auth)
-13. [Dừng và reset stack](#13-dừng-và-reset-stack)
-14. [Xử lý lỗi thường gặp](#14-xử-lý-lỗi-thường-gặp)
+1. [Thiết lập Postman](#1-thiết-lập-postman)
+2. [Tài khoản demo](#2-tài-khoản-demo)
+3. [Nhóm 1 — Auth (không cần Fabric)](#3-nhóm-1--auth-không-cần-fabric)
+4. [Nhóm 2 — Query & Read-model (không cần Fabric)](#4-nhóm-2--query--read-model-không-cần-fabric)
+5. [Nhóm 3 — Farmer endpoints (cần Fabric)](#5-nhóm-3--farmer-endpoints-cần-fabric)
+6. [Nhóm 4 — Processor endpoints (cần Fabric)](#6-nhóm-4--processor-endpoints-cần-fabric)
+7. [Nhóm 5 — Roaster + Transfer endpoints (cần Fabric)](#7-nhóm-5--roaster--transfer-endpoints-cần-fabric)
+8. [Nhóm 6 — Packager endpoints (cần Fabric)](#8-nhóm-6--packager-endpoints-cần-fabric)
+9. [Nhóm 7 — Retailer endpoints (cần Fabric)](#9-nhóm-7--retailer-endpoints-cần-fabric)
+10. [Nhóm 8 — Public Trace & QR (không cần auth, không cần Fabric)](#10-nhóm-8--public-trace--qr-không-cần-auth-không-cần-fabric)
+11. [Luồng test đầy đủ — copy-paste 1 lần](#11-luồng-test-đầy-đủ--copy-paste-1-lần)
+12. [Xử lý lỗi thường gặp](#12-xử-lý-lỗi-thường-gặp)
 
 ---
 
-## 1. Yêu cầu cài đặt
+## 1. Thiết lập Postman
 
-| Phần mềm | Version | Ghi chú |
-|---|---|---|
-| **Docker Desktop** | 4.x trở lên | Phải đang chạy (icon xanh ở taskbar) |
-| **Postman** | Bất kỳ | Hoặc dùng Swagger UI thay thế |
+### 1.1 Tạo Environment
 
----
-
-## 2. Khởi động stack Docker
-
-Mở terminal tại thư mục gốc dự án:
-
-```powershell
-cd e:\WINDOW\BTL\ATBM\CoffeeChain\network
-```
-
-### Lần đầu (build image từ source):
-
-```powershell
-docker compose -f docker-compose.be-only.yaml up --build
-```
-
-> Maven sẽ download dependency và compile — mất khoảng 3–5 phút.  
-> Các lần sau dùng cache, chỉ ~30 giây.
-
-### Từ lần 2 trở đi:
-
-```powershell
-docker compose -f docker-compose.be-only.yaml up -d
-```
-
-### Kiểm tra trạng thái:
-
-```powershell
-docker compose -f docker-compose.be-only.yaml ps
-```
-
-Kết quả mong đợi — **3 container đều `Up`**:
-
-```
-NAME       STATUS
-postgres   Up (healthy)
-ipfs       Up (healthy)
-backend    Up
-```
-
-### Xác nhận backend sẵn sàng:
-
-```powershell
-docker logs backend 2>&1 | Select-String "Started CoffeeTraceApplication"
-```
-
-Hoặc mở trình duyệt: **http://localhost:8080/swagger-ui.html**
-
-> **Lưu ý**: Các `WARN` về Fabric/EventIndexer trong log là **bình thường** — backend vẫn chạy đầy đủ tính năng không cần Fabric.
-
----
-
-## 3. Thiết lập Postman
-
-### 3.1 Tạo Environment
-
-1. Mở Postman → click **Environments** (icon bánh răng hoặc cửa sổ) → **New Environment**
+1. Mở Postman → **Environments** → **New Environment**
 2. Đặt tên: `CoffeeChain Local`
 3. Thêm 2 biến:
 
-| Variable | Initial Value | Current Value |
-|---|---|---|
-| `base_url` | `http://localhost:8080` | `http://localhost:8080` |
-| `token` | *(để trống)* | *(để trống — sẽ điền sau khi login)* |
+| Variable | Initial Value |
+|---|---|
+| `base_url` | `http://localhost:8080` |
+| `token` | *(để trống — điền sau khi login)* |
 
-4. **Save** và **chọn environment này** ở dropdown góc phải trên của Postman.
+4. **Save** và **chọn environment này** ở dropdown góc phải trên.
 
-### 3.2 Cách thêm Authorization vào request
+### 1.2 Cách gắn token (quan trọng)
 
-> **Lưu ý quan trọng**: Response login trả về token đã có sẵn `Bearer ` ở đầu (`"token": "Bearer eyJ..."`). Vì vậy **KHÔNG** dùng Authorization type "Bearer Token" trong Postman (sẽ bị thêm `Bearer ` lần nữa → thành `Bearer Bearer eyJ...` → 403).
+> Response login trả về `"token": "Bearer eyJ..."` — đã có sẵn `Bearer ` ở đầu.  
+> **KHÔNG** dùng tab **Authorization → Bearer Token** trong Postman (sẽ bị thêm `Bearer ` lần 2 → 403).
 
-Với mọi endpoint cần auth, thêm **Header thủ công**:
+Với **mọi request cần auth**, vào tab **Headers** và thêm thủ công:
 
 | Key | Value |
 |---|---|
 | `Authorization` | `{{token}}` |
 
-*(Vào tab **Headers** → thêm dòng trên. Không dùng tab Authorization → Bearer Token.)*
+### 1.3 Chuẩn bị biến shell TOKEN (cho curl)
+
+```bash
+# Chạy 1 lần, dùng được cho toàn bộ session
+RESPONSE=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"farmer_alice","password":"pw123"}')
+
+TOKEN=$(echo $RESPONSE | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+echo "Token: ${TOKEN:0:50}..."
+```
 
 ---
 
-## 4. Tài khoản demo
+## 2. Tài khoản demo
 
-> **Password tất cả đều là `pw123`**
+> Password đăng nhập API tất cả là **`pw123`**
 
-| userId | Role | Org | Quyền |
+| userId | Role | Org | Quyền chính |
 |---|---|---|---|
 | `farmer_alice` | FARMER | Org1MSP | Tạo HarvestBatch, ghi Farm Activity |
 | `processor_bob` | PROCESSOR | Org1MSP | Tạo ProcessedBatch |
-| `roaster_charlie` | ROASTER | Org1MSP | Tạo RoastBatch, add Evidence, request Transfer |
+| `roaster_charlie` | ROASTER | Org1MSP | Tạo RoastBatch, thêm Evidence, yêu cầu Transfer |
 | `packager_dave` | PACKAGER | Org2MSP | Accept Transfer, tạo PackagedBatch |
 | `retailer_eve` | RETAILER | Org2MSP | Cập nhật status IN_STOCK / SOLD |
 
 ---
 
-## 5. Nhóm 1 — Auth (không cần Fabric)
+## 3. Nhóm 1 — Auth (không cần Fabric)
 
-### 5.1 Đăng nhập
+### 3.1 Đăng nhập
 
 ```
 POST {{base_url}}/api/auth/login
@@ -154,94 +105,126 @@ Content-Type: application/json
 }
 ```
 
-> **Quan trọng**: Copy toàn bộ chuỗi `Bearer eyJ...` (**bao gồm chữ `Bearer ` ở đầu**) và paste vào biến `{{token}}` trong Environment.
+> Copy toàn bộ chuỗi `Bearer eyJ...` (bao gồm chữ `Bearer `) paste vào biến `{{token}}`.
+
+**curl — lưu token tự động:**
+```bash
+RESPONSE=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"farmer_alice","password":"pw123"}')
+echo $RESPONSE | python3 -m json.tool
+TOKEN=$(echo $RESPONSE | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+```
 
 **Test sai credentials (HTTP 401):**
-```json
-{
-  "userId": "farmer_alice",
-  "password": "wrong"
-}
+```bash
+curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"farmer_alice","password":"wrong"}' | python3 -m json.tool
 ```
 
 **Test thiếu field (HTTP 400):**
-```json
-{
-  "userId": "farmer_alice"
-}
+```bash
+curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"farmer_alice"}' | python3 -m json.tool
 ```
 
 ---
 
-## 6. Nhóm 2 — Query & Read-model (không cần Fabric)
+## 4. Nhóm 2 — Query & Read-model (không cần Fabric)
 
-> Cần header: `Authorization: Bearer {{token}}`  
-> Khi DB còn trống, các endpoint trả về `[]` hoặc `404` — đây là kết quả **đúng**.
+> Cần header `Authorization: {{token}}`.  
+> DB trống sẽ trả về `[]` hoặc `HTTP 404` — **đây là kết quả đúng**.
 
-### 6.1 Lấy tất cả batches
+### 4.1 Lấy tất cả batches
 
 ```
 GET {{base_url}}/api/batches
-Authorization: Bearer {{token}}
+Authorization: {{token}}
 ```
 
-**Response (HTTP 200):** `[]` *(khi DB trống)*
-
-### 6.2 Lọc batches theo type
-
-```
-GET {{base_url}}/api/batches?type=HARVEST
-GET {{base_url}}/api/batches?type=PROCESSED
-GET {{base_url}}/api/batches?type=ROAST
-GET {{base_url}}/api/batches?type=PACKAGED
+```bash
+curl -s http://localhost:8080/api/batches \
+  -H "Authorization: $TOKEN" | python3 -m json.tool
 ```
 
-### 6.3 Lọc batches theo status
+**Response (HTTP 200):** `[]` khi DB chưa có data.
 
-```
-GET {{base_url}}/api/batches?status=COMPLETED
-GET {{base_url}}/api/batches?status=IN_PROCESS
-GET {{base_url}}/api/batches?status=TRANSFER_PENDING
-```
+### 4.2 Lọc batches theo type
 
-### 6.4 Lọc batches theo ownerMSP
-
-```
-GET {{base_url}}/api/batches?ownerMSP=Org1MSP
-GET {{base_url}}/api/batches?ownerMSP=Org2MSP
+```bash
+# type: HARVEST | PROCESSED | ROAST | PACKAGED
+curl -s "http://localhost:8080/api/batches?type=HARVEST" -H "Authorization: $TOKEN" | python3 -m json.tool
+curl -s "http://localhost:8080/api/batches?type=PROCESSED" -H "Authorization: $TOKEN" | python3 -m json.tool
+curl -s "http://localhost:8080/api/batches?type=ROAST" -H "Authorization: $TOKEN" | python3 -m json.tool
+curl -s "http://localhost:8080/api/batches?type=PACKAGED" -H "Authorization: $TOKEN" | python3 -m json.tool
 ```
 
-### 6.5 Lấy chi tiết 1 batch (từ PostgreSQL)
+### 4.3 Lọc batches theo status
+
+```bash
+# status: CREATED | IN_PROCESS | COMPLETED | TRANSFER_PENDING | IN_STOCK | SOLD
+curl -s "http://localhost:8080/api/batches?status=COMPLETED" -H "Authorization: $TOKEN" | python3 -m json.tool
+curl -s "http://localhost:8080/api/batches?status=TRANSFER_PENDING" -H "Authorization: $TOKEN" | python3 -m json.tool
+```
+
+### 4.4 Lọc batches theo ownerMSP
+
+```bash
+curl -s "http://localhost:8080/api/batches?ownerMSP=Org1MSP" -H "Authorization: $TOKEN" | python3 -m json.tool
+curl -s "http://localhost:8080/api/batches?ownerMSP=Org2MSP" -H "Authorization: $TOKEN" | python3 -m json.tool
+```
+
+### 4.5 Lấy chi tiết 1 batch (từ PostgreSQL read-model)
 
 ```
 GET {{base_url}}/api/batch/{batchId}
-Authorization: Bearer {{token}}
+Authorization: {{token}}
 ```
 
-Thay `{batchId}` bằng ID thực từ kết quả của POST tạo batch.  
-**Response (HTTP 404)** khi DB trống — expected.
+```bash
+# Thay HARVEST-xxxx-xxxx bằng ID thực
+curl -s http://localhost:8080/api/batch/HARVEST-xxxx-xxxx \
+  -H "Authorization: $TOKEN" | python3 -m json.tool
+```
 
-### 6.6 Lấy chi tiết 1 batch trực tiếp từ Fabric ledger
+**Response (HTTP 404)** khi không có data — expected.
+
+### 4.6 Lấy chi tiết 1 batch trực tiếp từ Fabric ledger
 
 ```
 GET {{base_url}}/api/batch/{batchId}?source=chain
-Authorization: Bearer {{token}}
+Authorization: {{token}}
 ```
 
-> Sẽ trả về **HTTP 500** khi không có Fabric network — expected.
+```bash
+curl -s "http://localhost:8080/api/batch/HARVEST-xxxx-xxxx?source=chain" \
+  -H "Authorization: $TOKEN" | python3 -m json.tool
+```
+
+> Trả về **HTTP 500** khi không có Fabric network (Chế độ A) — expected.
 
 ---
 
-## 7. Nhóm 3 — Farmer endpoints (cần Fabric)
+## 5. Nhóm 3 — Farmer endpoints (cần Fabric)
 
 > Login với `farmer_alice` trước.  
-> Không có Fabric → trả về **HTTP 500** — kết quả đúng logic, endpoint hoạt động.
+> **Chế độ A (be-only)**: trả về HTTP 500 — bình thường.  
+> **Chế độ B (full-stack)**: trả về HTTP 200.
 
-### 7.1 Tạo HarvestBatch
+```bash
+RESPONSE=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"farmer_alice","password":"pw123"}')
+TOKEN=$(echo $RESPONSE | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+```
+
+### 5.1 Tạo HarvestBatch
 
 ```
 POST {{base_url}}/api/harvest
-Authorization: Bearer {{token}}
+Authorization: {{token}}
 Content-Type: application/json
 ```
 
@@ -255,10 +238,27 @@ Content-Type: application/json
 }
 ```
 
-**Response mong đợi (khi có Fabric, HTTP 200):**
+**curl:**
+```bash
+HARVEST_RESP=$(curl -s -X POST http://localhost:8080/api/harvest \
+  -H "Authorization: $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "farmLocation": "Đà Lạt, Lâm Đồng",
+    "harvestDate": "2026-03-01",
+    "coffeeVariety": "Arabica",
+    "weightKg": "500.0"
+  }')
+echo $HARVEST_RESP | python3 -m json.tool
+
+HARVEST_ID=$(echo $HARVEST_RESP | python3 -c "import sys,json; print(json.load(sys.stdin)['batchId'])")
+echo "HarvestBatch ID: $HARVEST_ID"
+```
+
+**Response mong đợi (HTTP 200, khi có Fabric):**
 ```json
 {
-  "batchId": "HARVEST-xxxx-xxxx",
+  "batchId": "HARVEST-abc123-def456",
   "type": "HARVEST",
   "ownerMsp": "Org1MSP",
   "status": "CREATED",
@@ -271,30 +271,30 @@ Content-Type: application/json
 }
 ```
 
-### 7.2 Ghi Farm Activity
+### 5.2 Ghi Farm Activity
 
 ```
 POST {{base_url}}/api/harvest/{batchId}/activity
-Authorization: Bearer {{token}}
+Authorization: {{token}}
 Content-Type: application/json
 ```
 
 **Body (có evidence):**
 ```json
 {
-  "harvestBatchId": "HARVEST-xxxx-xxxx",
+  "harvestBatchId": "HARVEST-abc123-def456",
   "activityType": "FERTILIZATION",
   "activityDate": "2026-03-05",
   "note": "Bón phân NPK lần 1",
-  "evidenceHash": "abc123def456...",
-  "evidenceUri": "ipfs://QmXxx..."
+  "evidenceHash": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+  "evidenceUri": "ipfs://QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG"
 }
 ```
 
 **Body (không có evidence):**
 ```json
 {
-  "harvestBatchId": "HARVEST-xxxx-xxxx",
+  "harvestBatchId": "HARVEST-abc123-def456",
   "activityType": "IRRIGATION",
   "activityDate": "2026-03-06",
   "note": "Tưới nước buổi sáng"
@@ -303,39 +303,61 @@ Content-Type: application/json
 
 > `activityType` hợp lệ: `IRRIGATION`, `FERTILIZATION`, `PESTICIDE`, `PRUNING`, `OTHER`
 
-### 7.3 Cập nhật status HarvestBatch
+**curl:**
+```bash
+curl -s -X POST http://localhost:8080/api/harvest/$HARVEST_ID/activity \
+  -H "Authorization: $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "harvestBatchId": "'"$HARVEST_ID"'",
+    "activityType": "FERTILIZATION",
+    "activityDate": "2026-03-05",
+    "note": "Bón phân NPK lần 1"
+  }' | python3 -m json.tool
+```
+
+### 5.3 Cập nhật status HarvestBatch
 
 ```
 PATCH {{base_url}}/api/harvest/{batchId}/status
-Authorization: Bearer {{token}}
+Authorization: {{token}}
 Content-Type: application/json
 ```
 
-**Body:**
-```json
-{
-  "newStatus": "COMPLETED"
-}
+```bash
+curl -s -X PATCH http://localhost:8080/api/harvest/$HARVEST_ID/status \
+  -H "Authorization: $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"newStatus": "COMPLETED"}' | python3 -m json.tool
 ```
+
+> `newStatus` hợp lệ cho HARVEST: `IN_PROCESS`, `COMPLETED`
 
 ---
 
-## 8. Nhóm 4 — Processor endpoints (cần Fabric)
+## 6. Nhóm 4 — Processor endpoints (cần Fabric)
 
 > Login với `processor_bob` trước.
 
-### 8.1 Tạo ProcessedBatch
+```bash
+RESPONSE=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"processor_bob","password":"pw123"}')
+TOKEN=$(echo $RESPONSE | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+```
+
+### 6.1 Tạo ProcessedBatch
 
 ```
 POST {{base_url}}/api/process
-Authorization: Bearer {{token}}
+Authorization: {{token}}
 Content-Type: application/json
 ```
 
 **Body:**
 ```json
 {
-  "parentBatchId": "HARVEST-xxxx-xxxx",
+  "parentBatchId": "HARVEST-abc123-def456",
   "processingMethod": "Washed",
   "startDate": "2026-03-03",
   "endDate": "2026-03-08",
@@ -346,39 +368,58 @@ Content-Type: application/json
 
 > `processingMethod` hợp lệ: `Washed`, `Natural`, `Honey`
 
-### 8.2 Cập nhật status ProcessedBatch
-
+**curl:**
+```bash
+PROCESS_RESP=$(curl -s -X POST http://localhost:8080/api/process \
+  -H "Authorization: $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "parentBatchId": "'"$HARVEST_ID"'",
+    "processingMethod": "Washed",
+    "startDate": "2026-03-03",
+    "endDate": "2026-03-08",
+    "facilityName": "Nhà Máy Sơ Chế Đà Lạt",
+    "weightKg": "480.0"
+  }')
+echo $PROCESS_RESP | python3 -m json.tool
+PROCESS_ID=$(echo $PROCESS_RESP | python3 -c "import sys,json; print(json.load(sys.stdin)['batchId'])")
+echo "ProcessedBatch ID: $PROCESS_ID"
 ```
-PATCH {{base_url}}/api/process/{batchId}/status
-Authorization: Bearer {{token}}
-Content-Type: application/json
-```
 
-**Body:**
-```json
-{
-  "newStatus": "COMPLETED"
-}
+### 6.2 Cập nhật status ProcessedBatch
+
+```bash
+curl -s -X PATCH http://localhost:8080/api/process/$PROCESS_ID/status \
+  -H "Authorization: $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"newStatus": "COMPLETED"}' | python3 -m json.tool
 ```
 
 ---
 
-## 9. Nhóm 5 — Roaster + Transfer endpoints (cần Fabric)
+## 7. Nhóm 5 — Roaster + Transfer endpoints (cần Fabric)
 
 > Login với `roaster_charlie` trước.
 
-### 9.1 Tạo RoastBatch
+```bash
+RESPONSE=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"roaster_charlie","password":"pw123"}')
+TOKEN=$(echo $RESPONSE | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+```
+
+### 7.1 Tạo RoastBatch
 
 ```
 POST {{base_url}}/api/roast
-Authorization: Bearer {{token}}
+Authorization: {{token}}
 Content-Type: application/json
 ```
 
 **Body:**
 ```json
 {
-  "parentBatchId": "PROCESSED-xxxx-xxxx",
+  "parentBatchId": "PROCESSED-xxx-yyy",
   "roastProfile": "Medium",
   "roastDate": "2026-03-10",
   "roastDurationMinutes": "15",
@@ -388,13 +429,28 @@ Content-Type: application/json
 
 > `roastProfile` hợp lệ: `Light`, `Medium-Light`, `Medium`, `Dark`
 
-### 9.2 Thêm Evidence vào batch
+**curl:**
+```bash
+ROAST_RESP=$(curl -s -X POST http://localhost:8080/api/roast \
+  -H "Authorization: $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "parentBatchId": "'"$PROCESS_ID"'",
+    "roastProfile": "Medium",
+    "roastDate": "2026-03-10",
+    "roastDurationMinutes": "15",
+    "weightKg": "460.0"
+  }')
+echo $ROAST_RESP | python3 -m json.tool
+ROAST_ID=$(echo $ROAST_RESP | python3 -c "import sys,json; print(json.load(sys.stdin)['batchId'])")
+echo "RoastBatch ID: $ROAST_ID"
+```
 
-> Evidence thường được upload lên IPFS trước (qua `POST /api/evidence/upload`), sau đó dùng hash + URI ở đây.
+### 7.2 Thêm Evidence vào RoastBatch
 
 ```
 POST {{base_url}}/api/roast/{batchId}/evidence
-Authorization: Bearer {{token}}
+Authorization: {{token}}
 Content-Type: application/json
 ```
 
@@ -406,52 +462,122 @@ Content-Type: application/json
 }
 ```
 
-> `evidenceHash` là SHA-256 hexadecimal (64 ký tự).  
-> `evidenceUri` là IPFS URI của file evidence đã upload.
+> `evidenceHash` = SHA-256 hex (64 ký tự).  
+> `evidenceUri` = IPFS URI sau khi upload file lên IPFS (qua `POST /api/evidence/upload`).
 
-### 9.3 Yêu cầu Transfer sang Org2 (Packager)
+**curl:**
+```bash
+curl -s -X POST http://localhost:8080/api/roast/$ROAST_ID/evidence \
+  -H "Authorization: $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "evidenceHash": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+    "evidenceUri": "ipfs://QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG"
+  }' | python3 -m json.tool
+```
+
+### 7.3 Upload Evidence lên IPFS (tùy chọn)
+
+```
+POST {{base_url}}/api/evidence/upload
+Authorization: {{token}}
+Content-Type: multipart/form-data
+```
+
+**Postman**: Body → form-data → thêm key `file`, chọn Type = File, chọn file từ máy.
+
+**curl:**
+```bash
+curl -s -X POST http://localhost:8080/api/evidence/upload \
+  -H "Authorization: $TOKEN" \
+  -F "file=@/path/to/your/evidence-file.pdf" | python3 -m json.tool
+```
+
+**Response mong đợi:**
+```json
+{
+  "cid": "QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG",
+  "uri": "ipfs://QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG",
+  "sha256": "a1b2c3d4e5f6..."
+}
+```
+
+### 7.4 Yêu cầu Transfer sang Org2
 
 ```
 POST {{base_url}}/api/transfer/request
-Authorization: Bearer {{token}}
+Authorization: {{token}}
 Content-Type: application/json
 ```
 
 **Body:**
 ```json
 {
-  "batchId": "ROAST-xxxx-xxxx",
+  "batchId": "ROAST-xxx-yyy",
+  "toMSP": "Org2MSP"
+}
+```
+
+**curl:**
+```bash
+curl -s -X POST http://localhost:8080/api/transfer/request \
+  -H "Authorization: $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "batchId": "'"$ROAST_ID"'",
+    "toMSP": "Org2MSP"
+  }' | python3 -m json.tool
+```
+
+**Response mong đợi (HTTP 200):**
+```json
+{
+  "batchId": "ROAST-xxx-yyy",
+  "status": "TRANSFER_PENDING",
   "toMSP": "Org2MSP"
 }
 ```
 
 ---
 
-## 10. Nhóm 6 — Packager endpoints (cần Fabric)
+## 8. Nhóm 6 — Packager endpoints (cần Fabric)
 
 > Login với `packager_dave` trước.
 
-### 10.1 Chấp nhận Transfer (SBE AND — Org1+Org2 endorsement)
+```bash
+RESPONSE=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"packager_dave","password":"pw123"}')
+TOKEN=$(echo $RESPONSE | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+```
+
+### 8.1 Chấp nhận Transfer
 
 ```
 POST {{base_url}}/api/transfer/accept/{batchId}
-Authorization: Bearer {{token}}
+Authorization: {{token}}
 ```
 
-> Đây là endpoint đặc biệt — chaincode yêu cầu cả 2 tổ chức đồng ký (State-Based Endorsement). Cần Fabric network đầy đủ.
+```bash
+curl -s -X POST http://localhost:8080/api/transfer/accept/$ROAST_ID \
+  -H "Authorization: $TOKEN" | python3 -m json.tool
+```
 
-### 10.2 Tạo PackagedBatch
+> Endpoint này yêu cầu endorsement từ cả 2 org (State-Based Endorsement AND policy).  
+> Chỉ hoạt động ở Chế độ B — sẽ fail HTTP 500 ở chế độ be-only.
+
+### 8.2 Tạo PackagedBatch
 
 ```
 POST {{base_url}}/api/package
-Authorization: Bearer {{token}}
+Authorization: {{token}}
 Content-Type: application/json
 ```
 
 **Body:**
 ```json
 {
-  "parentBatchId": "ROAST-xxxx-xxxx",
+  "parentBatchId": "ROAST-xxx-yyy",
   "packageWeight": "250",
   "packageDate": "2026-03-11",
   "expiryDate": "2027-03-11",
@@ -459,225 +585,356 @@ Content-Type: application/json
 }
 ```
 
-> `packageWeight` tính bằng gram/gói.
+> `packageWeight`: gram/gói. `packageCount`: số lượng gói.
 
-### 10.3 Lấy QR code của batch (PNG image)
+**curl:**
+```bash
+PACKAGE_RESP=$(curl -s -X POST http://localhost:8080/api/package \
+  -H "Authorization: $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "parentBatchId": "'"$ROAST_ID"'",
+    "packageWeight": "250",
+    "packageDate": "2026-03-11",
+    "expiryDate": "2027-03-11",
+    "packageCount": "50"
+  }')
+echo $PACKAGE_RESP | python3 -m json.tool
+
+PACKAGE_ID=$(echo $PACKAGE_RESP | python3 -c "import sys,json; print(json.load(sys.stdin)['batchId'])")
+PUBLIC_CODE=$(echo $PACKAGE_RESP | python3 -c "import sys,json; print(json.load(sys.stdin)['publicCode'])")
+echo "PackagedBatch ID: $PACKAGE_ID"
+echo "Public code: $PUBLIC_CODE"
+```
+
+**Response mong đợi (HTTP 200):**
+```json
+{
+  "batchId": "PACKAGED-xxx-yyy",
+  "publicCode": "COFFEE-2026-ABC123",
+  "type": "PACKAGED",
+  "ownerMsp": "Org2MSP",
+  "status": "CREATED",
+  "metadata": {
+    "packageWeight": "250",
+    "packageDate": "2026-03-11",
+    "expiryDate": "2027-03-11",
+    "packageCount": "50"
+  }
+}
+```
+
+### 8.3 Lấy QR code (PNG image)
 
 ```
 GET {{base_url}}/api/package/{batchId}/qr
-Authorization: Bearer {{token}}
+Authorization: {{token}}
 ```
 
-**Response**: File PNG của QR code chứa URL trace công khai.
+**Postman**: Gửi request → tab **Body** → click **Send and Download** để lưu file PNG.
 
-> Trong Postman: chuyển tab **Body** → chọn **Visualize** hoặc lưu file để xem QR.
+**curl:**
+```bash
+curl -s http://localhost:8080/api/package/$PACKAGE_ID/qr \
+  -H "Authorization: $TOKEN" \
+  --output qr_code.png && xdg-open qr_code.png 2>/dev/null || true
+```
 
 ---
 
-## 11. Nhóm 7 — Retailer endpoints (cần Fabric)
+## 9. Nhóm 7 — Retailer endpoints (cần Fabric)
 
 > Login với `retailer_eve` trước.
 
-### 11.1 Cập nhật status batch (IN_STOCK / SOLD)
+```bash
+RESPONSE=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"retailer_eve","password":"pw123"}')
+TOKEN=$(echo $RESPONSE | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+```
+
+### 9.1 Cập nhật status batch (IN_STOCK / SOLD)
 
 ```
 PATCH {{base_url}}/api/retail/{batchId}/status
-Authorization: Bearer {{token}}
+Authorization: {{token}}
 Content-Type: application/json
 ```
 
 **Đưa vào kho:**
-```json
-{
-  "newStatus": "IN_STOCK"
-}
+```bash
+curl -s -X PATCH http://localhost:8080/api/retail/$PACKAGE_ID/status \
+  -H "Authorization: $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"newStatus": "IN_STOCK"}' | python3 -m json.tool
 ```
 
-**Đã bán:**
-```json
-{
-  "newStatus": "SOLD"
-}
+**Đánh dấu đã bán:**
+```bash
+curl -s -X PATCH http://localhost:8080/api/retail/$PACKAGE_ID/status \
+  -H "Authorization: $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"newStatus": "SOLD"}' | python3 -m json.tool
 ```
 
 ---
 
-## 12. Nhóm 8 — Public Trace & QR (không cần Fabric, không cần auth)
+## 10. Nhóm 8 — Public Trace & QR (không cần auth, không cần Fabric)
 
-> Các endpoint này **mở hoàn toàn** — không cần token, không cần Fabric. Dùng để người tiêu dùng tra cứu nguồn gốc.
+> Các endpoint **hoàn toàn mở** — không cần token, không cần Fabric. Dành cho người tiêu dùng tra cứu.
 
-### 12.1 Tra cứu nguồn gốc theo publicCode
+### 10.1 Tra cứu nguồn gốc theo publicCode
 
 ```
 GET {{base_url}}/api/trace/{publicCode}
 ```
 
-**Response mong đợi (khi có data, HTTP 200):**
+```bash
+curl -s http://localhost:8080/api/trace/$PUBLIC_CODE | python3 -m json.tool
+```
+
+**Response mong đợi (HTTP 200, khi có data):**
 ```json
 {
   "batch": {
-    "batchId": "PACKAGED-xxxx",
+    "batchId": "PACKAGED-xxx",
     "publicCode": "COFFEE-2026-ABC123",
     "type": "PACKAGED",
     "ownerMsp": "Org2MSP",
-    "status": "IN_STOCK",
-    "metadata": { ... }
+    "status": "IN_STOCK"
   },
   "parentChain": [
-    { "type": "ROAST", ... },
-    { "type": "PROCESSED", ... },
-    { "type": "HARVEST", ... }
+    { "type": "ROAST", "batchId": "ROAST-...", "status": "COMPLETED" },
+    { "type": "PROCESSED", "batchId": "PROCESSED-...", "status": "COMPLETED" },
+    { "type": "HARVEST", "batchId": "HARVEST-...", "status": "COMPLETED" }
   ],
   "farmActivities": [
     {
       "activityType": "FERTILIZATION",
       "activityDate": "2026-03-05",
-      "note": "Bón phân NPK",
+      "note": "Bón phân NPK lần 1",
       "recordedAt": "2026-03-05T08:00:00Z"
     }
   ],
   "ledgerRefs": [
-    {
-      "eventName": "BATCH_CREATED",
-      "txId": "abc123...",
-      "blockNumber": 5
-    }
+    { "eventName": "BATCH_CREATED", "txId": "abc123", "blockNumber": 5 }
   ]
 }
 ```
 
-**Response khi không tìm thấy (HTTP 404):** expected khi DB trống.
+**HTTP 404** khi không có data — expected khi DB trống.
 
-### 12.2 Lấy QR code PNG theo publicCode
+### 10.2 Lấy QR code PNG theo publicCode
 
 ```
 GET {{base_url}}/api/qr/{publicCode}
 ```
 
-**Response**: File PNG (Content-Type: `image/png`)  
-Quét QR code sẽ dẫn đến URL: `http://localhost:3000/trace/{publicCode}`
+```bash
+curl -s "http://localhost:8080/api/qr/$PUBLIC_CODE" --output public_qr.png
+xdg-open public_qr.png 2>/dev/null || true
+```
+
+> Quét QR code sẽ dẫn tới: `http://localhost:3000/trace/{publicCode}`
 
 ---
 
-## 13. Dừng và reset stack
+## 11. Luồng test đầy đủ — copy-paste 1 lần
 
-### Dừng (giữ data):
-```powershell
-docker compose -f docker-compose.be-only.yaml stop
-```
+> Chạy từng block theo thứ tự trong terminal bash.  
+> **Yêu cầu**: Chế độ B đang chạy (setup-network + deploy-chaincode + register-users + backend up).
 
-### Khởi động lại (không build lại):
-```powershell
-docker compose -f docker-compose.be-only.yaml start
-```
+```bash
+BASE="http://localhost:8080"
 
-### Dừng và **xóa toàn bộ data** (reset DB về trạng thái seed ban đầu):
-```powershell
-docker compose -f docker-compose.be-only.yaml down -v
-```
+# ── 1. Farmer: tạo HarvestBatch ──────────────────────────────────────────
+R=$(curl -s -X POST $BASE/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"farmer_alice","password":"pw123"}')
+TOKEN_FARMER=$(echo $R | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+echo "[1] Farmer logged in"
 
-> Sau `down -v`, lần `up` tiếp theo Flyway sẽ tạo lại schema + seed 5 user.
+R=$(curl -s -X POST $BASE/api/harvest \
+  -H "Authorization: $TOKEN_FARMER" \
+  -H "Content-Type: application/json" \
+  -d '{"farmLocation":"Đà Lạt, Lâm Đồng","harvestDate":"2026-03-01","coffeeVariety":"Arabica","weightKg":"500.0"}')
+HARVEST_ID=$(echo $R | python3 -c "import sys,json; print(json.load(sys.stdin)['batchId'])")
+echo "[1] HarvestBatch: $HARVEST_ID"
 
-### Xem log realtime:
-```powershell
-docker logs -f backend
-docker logs -f postgres
+curl -s -X POST $BASE/api/harvest/$HARVEST_ID/activity \
+  -H "Authorization: $TOKEN_FARMER" \
+  -H "Content-Type: application/json" \
+  -d '{"harvestBatchId":"'"$HARVEST_ID"'","activityType":"FERTILIZATION","activityDate":"2026-03-05","note":"Bón phân NPK"}' > /dev/null
+echo "[1] Farm activity recorded"
+
+curl -s -X PATCH $BASE/api/harvest/$HARVEST_ID/status \
+  -H "Authorization: $TOKEN_FARMER" \
+  -H "Content-Type: application/json" \
+  -d '{"newStatus":"COMPLETED"}' > /dev/null
+echo "[1] HarvestBatch -> COMPLETED"
+
+# ── 2. Processor: tạo ProcessedBatch ─────────────────────────────────────
+R=$(curl -s -X POST $BASE/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"processor_bob","password":"pw123"}')
+TOKEN_PROC=$(echo $R | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+echo "[2] Processor logged in"
+
+R=$(curl -s -X POST $BASE/api/process \
+  -H "Authorization: $TOKEN_PROC" \
+  -H "Content-Type: application/json" \
+  -d '{"parentBatchId":"'"$HARVEST_ID"'","processingMethod":"Washed","startDate":"2026-03-03","endDate":"2026-03-08","facilityName":"Nhà Máy Sơ Chế Đà Lạt","weightKg":"480.0"}')
+PROCESS_ID=$(echo $R | python3 -c "import sys,json; print(json.load(sys.stdin)['batchId'])")
+echo "[2] ProcessedBatch: $PROCESS_ID"
+
+curl -s -X PATCH $BASE/api/process/$PROCESS_ID/status \
+  -H "Authorization: $TOKEN_PROC" \
+  -H "Content-Type: application/json" \
+  -d '{"newStatus":"COMPLETED"}' > /dev/null
+echo "[2] ProcessedBatch -> COMPLETED"
+
+# ── 3. Roaster: tạo RoastBatch + yêu cầu Transfer ────────────────────────
+R=$(curl -s -X POST $BASE/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"roaster_charlie","password":"pw123"}')
+TOKEN_ROAST=$(echo $R | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+echo "[3] Roaster logged in"
+
+R=$(curl -s -X POST $BASE/api/roast \
+  -H "Authorization: $TOKEN_ROAST" \
+  -H "Content-Type: application/json" \
+  -d '{"parentBatchId":"'"$PROCESS_ID"'","roastProfile":"Medium","roastDate":"2026-03-10","roastDurationMinutes":"15","weightKg":"460.0"}')
+ROAST_ID=$(echo $R | python3 -c "import sys,json; print(json.load(sys.stdin)['batchId'])")
+echo "[3] RoastBatch: $ROAST_ID"
+
+curl -s -X POST $BASE/api/transfer/request \
+  -H "Authorization: $TOKEN_ROAST" \
+  -H "Content-Type: application/json" \
+  -d '{"batchId":"'"$ROAST_ID"'","toMSP":"Org2MSP"}' > /dev/null
+echo "[3] Transfer request -> Org2MSP"
+
+# ── 4. Packager: accept Transfer + tạo PackagedBatch ─────────────────────
+R=$(curl -s -X POST $BASE/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"packager_dave","password":"pw123"}')
+TOKEN_PACK=$(echo $R | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+echo "[4] Packager logged in"
+
+curl -s -X POST $BASE/api/transfer/accept/$ROAST_ID \
+  -H "Authorization: $TOKEN_PACK" > /dev/null
+echo "[4] Transfer accepted"
+
+R=$(curl -s -X POST $BASE/api/package \
+  -H "Authorization: $TOKEN_PACK" \
+  -H "Content-Type: application/json" \
+  -d '{"parentBatchId":"'"$ROAST_ID"'","packageWeight":"250","packageDate":"2026-03-11","expiryDate":"2027-03-11","packageCount":"50"}')
+PACKAGE_ID=$(echo $R | python3 -c "import sys,json; print(json.load(sys.stdin)['batchId'])")
+PUBLIC_CODE=$(echo $R | python3 -c "import sys,json; print(json.load(sys.stdin)['publicCode'])")
+echo "[4] PackagedBatch: $PACKAGE_ID"
+echo "[4] Public code:   $PUBLIC_CODE"
+
+# ── 5. Retailer: đưa vào kho ─────────────────────────────────────────────
+R=$(curl -s -X POST $BASE/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"retailer_eve","password":"pw123"}')
+TOKEN_RETAIL=$(echo $R | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+echo "[5] Retailer logged in"
+
+curl -s -X PATCH $BASE/api/retail/$PACKAGE_ID/status \
+  -H "Authorization: $TOKEN_RETAIL" \
+  -H "Content-Type: application/json" \
+  -d '{"newStatus":"IN_STOCK"}' > /dev/null
+echo "[5] Status -> IN_STOCK"
+
+# ── 6. Public trace (không cần auth) ─────────────────────────────────────
+echo ""
+echo "=== Provenance chain ==="
+curl -s $BASE/api/trace/$PUBLIC_CODE | python3 -m json.tool
+
+echo ""
+echo "=== QR Code ==="
+curl -s $BASE/api/qr/$PUBLIC_CODE --output ./coffee_qr.png
+echo "QR code saved: ./coffee_qr.png"
+xdg-open ./coffee_qr.png 2>/dev/null || true
 ```
 
 ---
 
-## 14. Xử lý lỗi thường gặp
-
-### Container `backend` không xuất hiện trong `ps`
-
-```powershell
-docker compose -f docker-compose.be-only.yaml logs backend
-```
-
-Xem error message ở cuối log để chẩn đoán.
-
----
+## 12. Xử lý lỗi thường gặp
 
 ### HTTP 401 Unauthorized
 
-- Token chưa được set vào biến `{{token}}`
-- Token đã hết hạn (mặc định 24 giờ) → Login lại
-- Gửi request với user không có quyền đúng role (VD: `farmer_alice` gọi endpoint của PROCESSOR)
-
----
+- Token chưa được set vào `{{token}}`
+- Token hết hạn (mặc định 24h) → Login lại
+- Request gửi với user sai role
 
 ### HTTP 403 Forbidden
 
-- Đúng token nhưng sai role. Ví dụ:
-  - `farmer_alice` (FARMER) gọi `POST /api/process` → 403
-  - `processor_bob` (PROCESSOR) gọi `POST /api/harvest` → 403
+Đúng token nhưng sai role. Ví dụ:
 
----
+| Endpoint | Role yêu cầu | Lỗi nếu dùng |
+|---|---|---|
+| `POST /api/harvest` | FARMER | 403 nếu dùng processor_bob |
+| `POST /api/process` | PROCESSOR | 403 nếu dùng farmer_alice |
+| `POST /api/roast` | ROASTER | 403 nếu dùng packager_dave |
+| `POST /api/package` | PACKAGER | 403 nếu dùng farmer_alice |
+| `PATCH /api/retail/*/status` | RETAILER | 403 nếu dùng roaster_charlie |
+
+> **Đặc biệt**: Token trong Postman bị thêm `Bearer ` lần 2 nếu dùng Authorization tab → Bearer Token → sẽ thành `Bearer Bearer eyJ...` → 403. Dùng tab Headers thủ công.
 
 ### HTTP 400 Bad Request
 
-- Thiếu field bắt buộc trong body (các field có `@NotBlank`)
-- Kiểm tra lại JSON body, đảm bảo đúng tên field
+Thiếu field bắt buộc hoặc giá trị không hợp lệ. Kiểm tra JSON body, đảm bảo đúng tên field.
 
----
+### HTTP 500 từ endpoint cần Fabric (Chế độ A)
 
-### HTTP 500 từ endpoint cần Fabric
+Bình thường khi chạy `docker-compose.be-only.yaml`. Message: `No Fabric identity loaded for user: ...`  
+→ Switch sang Chế độ B để test các endpoint này.
 
-- **Bình thường** khi chạy `docker-compose.be-only.yaml` vì không có Fabric network
-- Message: `"No Fabric identity loaded for user: ..."` → xác nhận đúng endpoint, chỉ thiếu Fabric
+### Container `backend` không start
 
----
-
-### Port 8080 đã bị chiếm
-
-```powershell
-netstat -ano | findstr :8080
+```bash
+docker compose -f docker-compose.be-only.yaml logs backend | tail -30
+# Lỗi thường gặp: postgres chưa ready → đợi postgres healthy rồi restart backend
+docker compose -f docker-compose.be-only.yaml restart backend
 ```
 
-Tìm PID và kill, hoặc đổi port trong `docker-compose.be-only.yaml`:
-```yaml
-ports:
-  - "8090:8080"   # đổi 8080 bên trái thành port khác
+### Port 8080 đang bị chiếm
+
+```bash
+ss -tlnp | grep :8080
+sudo kill -9 <PID>
 ```
 
----
+### `python3 -m json.tool` báo lỗi / không có python3
 
-### Swagger UI không load
-
-Kiểm tra backend đang chạy:
-```powershell
-docker logs backend 2>&1 | Select-String "Started"
+```bash
+sudo apt install -y python3
+# Hoặc dùng jq:
+sudo apt install -y jq
+curl -s http://localhost:8080/api/batches -H "Authorization: $TOKEN" | jq .
 ```
 
-Nếu chưa thấy dòng `Started CoffeeTraceApplication`, đợi thêm 10–15 giây.
+### curl trả về HTML thay vì JSON
 
----
-
-## Luồng test đầy đủ (khi có Fabric network)
-
+Thêm header `Accept: application/json`:
+```bash
+curl -s http://localhost:8080/api/batches \
+  -H "Authorization: $TOKEN" \
+  -H "Accept: application/json" | python3 -m json.tool
 ```
-1. Login farmer_alice          → lấy token FARMER
-2. POST /api/harvest           → tạo HarvestBatch → ghi batchId vào biến {{harvestId}}
-3. POST /api/harvest/{id}/activity  → ghi farm activity
-4. PATCH /api/harvest/{id}/status   → status = COMPLETED
 
-5. Login processor_bob         → lấy token PROCESSOR
-6. POST /api/process           → tạo ProcessedBatch, parentBatchId = {{harvestId}}
-7. PATCH /api/process/{id}/status  → status = COMPLETED
+### `docker: permission denied` khi không dùng sudo
 
-8. Login roaster_charlie       → lấy token ROASTER
-9. POST /api/roast             → tạo RoastBatch
-10. POST /api/roast/{id}/evidence  → đính kèm evidence
-11. POST /api/transfer/request → yêu cầu chuyển sang Org2MSP
+```bash
+sudo usermod -aG docker $USER && newgrp docker
+```
 
-12. Login packager_dave        → lấy token PACKAGER
-13. POST /api/transfer/accept/{id} → chấp nhận transfer
-14. POST /api/package          → tạo PackagedBatch → response có publicCode
-15. GET /api/package/{id}/qr   → lấy QR code PNG
+### `chmod +x` không có tác dụng (NTFS)
 
-16. Login retailer_eve         → lấy token RETAILER
-17. PATCH /api/retail/{id}/status  → status = IN_STOCK
-
-18. GET /api/trace/{publicCode}    → xem full provenance chain (không cần auth)
-19. GET /api/qr/{publicCode}       → xem QR PNG (không cần auth)
+Project trên NTFS không hỗ trợ Unix execute bits. Luôn dùng:
+```bash
+bash scripts/setup-network.sh
+bash scripts/deploy-chaincode.sh
+bash scripts/register-users.sh
 ```

@@ -24,6 +24,14 @@ SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NETWORK_DIR="$(cd "$SCRIPTS_DIR/.." && pwd)"
 cd "$NETWORK_DIR"
 
+# Load .env if present (written by setup-network.sh, sets CRYPTO_BASE=/tmp/coffeechain-crypto)
+# This ensures user certs are written to the same location containers mount
+if [[ -f "$NETWORK_DIR/.env" ]]; then
+  set -a; source "$NETWORK_DIR/.env"; set +a
+fi
+CRYPTO_HOME="${CRYPTO_BASE:-$NETWORK_DIR/crypto-config}"
+echo "  > Using CRYPTO_HOME=$CRYPTO_HOME"
+
 CA_CLIENT_BASE="/tmp/coffee-ca-client"
 
 # ── Helpers ───────────────────────────────────────────────
@@ -32,7 +40,7 @@ enroll_admin() {
   local org="$1"       # Org1 | Org2
   local ca_host="$2"   # ca.org1.example.com:7054
   local admin_dir="$CA_CLIENT_BASE/$org/admin"
-  local tls_cert="crypto-config/peerOrganizations/${org,,}.example.com/ca/ca.${org,,}.example.com-cert.pem"
+  local tls_cert="$CRYPTO_HOME/peerOrganizations/${org,,}.example.com/ca/ca-cert.pem"
 
   mkdir -p "$admin_dir"
   export FABRIC_CA_CLIENT_HOME="$admin_dir"
@@ -40,7 +48,7 @@ enroll_admin() {
   fabric-ca-client enroll \
     -u "https://admin:adminpw@$ca_host" \
     --caname "ca-${org,,}" \
-    --tls.certfiles "$NETWORK_DIR/$tls_cert"
+    --tls.certfiles "$tls_cert"
   echo "  > Admin enrolled for $org"
 }
 
@@ -51,8 +59,8 @@ register_and_enroll() {
   local role="$4"      # FARMER
   local msp_id="${org}MSP"
   local admin_dir="$CA_CLIENT_BASE/$org/admin"
-  local user_dir="crypto-config/peerOrganizations/${org,,}.example.com/users/$user_id"
-  local tls_cert="crypto-config/peerOrganizations/${org,,}.example.com/ca/ca.${org,,}.example.com-cert.pem"
+  local user_dir="$CRYPTO_HOME/peerOrganizations/${org,,}.example.com/users/$user_id"
+  local tls_cert="$CRYPTO_HOME/peerOrganizations/${org,,}.example.com/ca/ca-cert.pem"
 
   export FABRIC_CA_CLIENT_HOME="$admin_dir"
 
@@ -62,8 +70,8 @@ register_and_enroll() {
     --id.name "$user_id" \
     --id.secret "${user_id}pw" \
     --id.type client \
-    --id.attrs "role=${role}:ecert,hf.Revoker=false" \
-    --tls.certfiles "$NETWORK_DIR/$tls_cert" \
+    --id.attrs "role=${role}:ecert" \
+    --tls.certfiles "$tls_cert" \
     2>&1 | grep -v "already registered" || true
 
   # Enroll
@@ -74,9 +82,9 @@ register_and_enroll() {
     -u "https://${user_id}:${user_id}pw@$ca_host" \
     --caname "ca-${org,,}" \
     -M "$user_dir/msp" \
-    --enrollment.attrs "role,email" \
+    --enrollment.attrs "role" \
     --csr.cn "$user_id" \
-    --tls.certfiles "$NETWORK_DIR/$tls_cert"
+    --tls.certfiles "$tls_cert"
 
   echo "  > Registered and enrolled: $user_id ($role @ $msp_id)"
 }

@@ -1,4 +1,6 @@
-# AI-DLC internal (không commit rule engine)
+# ──────────────────────────────────────────────────────────
+# AI-DLC INTERNAL — không commit
+# ──────────────────────────────────────────────────────────
 .aidlc-rule-details/
 .copilot/
 aidlc-docs/
@@ -7,62 +9,115 @@ aidlc-docs/
 # SECRETS & CREDENTIALS — TUYỆT ĐỐI KHÔNG COMMIT
 # ──────────────────────────────────────────────────────────
 
-# Fabric crypto materials
+# Fabric crypto materials (sinh bởi cryptogen / Fabric CA — chứa private keys)
 network/crypto-config/
 network/channel-artifacts/
+# Fabric CA client workdir (sinh bởi register-users.sh)
+/tmp/coffeechain-crypto/
+/tmp/coffeechain-artifacts/
+# TLS / cert / key files (bất cứ đâu)
 *.pem
 *_sk
 *.key
 
-# Environment files
+# Environment files (chứa DB password, secret keys)
 .env
 .env.local
 .env.*.local
 .env.production
+.env.staging
+
+# ──────────────────────────────────────────────────────────
+# FABRIC / CHAINCODE BUILD ARTIFACTS
+# ──────────────────────────────────────────────────────────
+# Chaincode package (sinh bởi deploy-chaincode.sh)
+network/*.tar.gz
+# Fabric CA database (sinh lúc CA khởi động — không commit)
+*.db
+IssuerPublicKey
+IssuerRevocationPublicKey
 
 # ──────────────────────────────────────────────────────────
 # JAVA / MAVEN / GRADLE
 # ──────────────────────────────────────────────────────────
 target/
 build/
+bin/
 *.class
 *.jar
+!chaincode/gradle/wrapper/gradle-wrapper.jar
 *.war
 
 .gradle/
-!gradle-wrapper.jar
-!gradle-wrapper.properties
+!gradle/wrapper/gradle-wrapper.properties
 
 .settings/
 .project
 .classpath
-.idea/
 *.iml
+
+# ──────────────────────────────────────────────────────────
+# IDE
+# ──────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
 
 # ──────────────────────────────────────────────────────────
 # NODE / NEXT.JS
 # ──────────────────────────────────────────────────────────
 node_modules/
+.npm/
 frontend/.next/
 frontend/out/
 frontend/build/
+frontend/.env.local
 
-# Generated API client (regenerate từ openapi.yaml — chạy: npm run generate-api)
+# Generated API client (regenerate từ openapi.yaml)
 frontend/src/lib/api/generated/
 
+# ──────────────────────────────────────────────────────────
+# LOGS
+# ──────────────────────────────────────────────────────────
 *.log
+*.log.*
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # ──────────────────────────────────────────────────────────
 # OS
 # ──────────────────────────────────────────────────────────
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
 Thumbs.db
+ehthumbs.db
+desktop.ini
 
 # ──────────────────────────────────────────────────────────
 # TEST OUTPUT
 # ──────────────────────────────────────────────────────────
 coverage/
+.nyc_output/
+test-results/
+surefire-reports/
 
-# IDEs
-/.vscode
+# ──────────────────────────────────────────────────────────
+# DOCKER
+# ──────────────────────────────────────────────────────────
+# Docker volumes managed ngoài repo — không commit data
+postgres-data/
+ipfs-data/
+
+# ──────────────────────────────────────────────────────────
+# MISC
+# ──────────────────────────────────────────────────────────
+*.tmp
+*.bak
+*.orig
+*.patch
