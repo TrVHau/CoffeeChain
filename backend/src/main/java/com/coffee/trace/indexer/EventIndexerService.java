@@ -3,6 +3,7 @@ package com.coffee.trace.indexer;
 import com.coffee.trace.entity.BatchEntity;
 import com.coffee.trace.entity.FarmActivityEntity;
 import com.coffee.trace.entity.LedgerRefEntity;
+import java.time.LocalDate;
 import com.coffee.trace.repository.BatchRepository;
 import com.coffee.trace.repository.FarmActivityRepository;
 import com.coffee.trace.repository.LedgerRefRepository;
@@ -215,7 +216,7 @@ public class EventIndexerService {
         FarmActivityEntity activity = FarmActivityEntity.builder()
                 .harvestBatchId(p.get("harvestBatchId"))
                 .activityType(p.get("activityType"))
-                .activityDate(p.get("activityDate"))
+                .activityDate(p.get("activityDate") != null ? LocalDate.parse(p.get("activityDate")) : null)
                 .note(p.get("note"))
                 .evidenceHash(p.getOrDefault("evidenceHash", ""))
                 .evidenceUri(p.getOrDefault("evidenceUri", ""))

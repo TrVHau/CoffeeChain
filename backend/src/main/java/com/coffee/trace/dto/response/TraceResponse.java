@@ -31,7 +31,7 @@ public class TraceResponse {
         public static FarmActivityItem from(FarmActivityEntity a) {
             return FarmActivityItem.builder()
                     .activityType(a.getActivityType())
-                    .activityDate(a.getActivityDate())
+                    .activityDate(a.getActivityDate() != null ? a.getActivityDate().toString() : null)
                     .note(a.getNote())
                     .evidenceHash(a.getEvidenceHash())
                     .evidenceUri(a.getEvidenceUri())
