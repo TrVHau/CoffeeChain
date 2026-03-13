@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Map;
 
 @Entity
@@ -25,7 +26,7 @@ public class FarmActivityEntity {
     private String activityType;
 
     @Column(name = "activity_date")
-    private String activityDate;    // ISO date string as entered by farmer
+    private LocalDate activityDate;
 
     @Column(columnDefinition = "text")
     private String note;
@@ -52,7 +53,7 @@ public class FarmActivityEntity {
         return FarmActivityEntity.builder()
                 .harvestBatchId(payload.get("harvestBatchId"))
                 .activityType(payload.get("activityType"))
-                .activityDate(payload.get("activityDate"))
+                .activityDate(LocalDate.parse(payload.get("activityDate")))
                 .note(payload.get("note"))
                 .evidenceHash(payload.getOrDefault("evidenceHash", ""))
                 .evidenceUri(payload.getOrDefault("evidenceUri", ""))

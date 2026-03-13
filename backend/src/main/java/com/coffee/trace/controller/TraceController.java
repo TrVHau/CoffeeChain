@@ -6,6 +6,8 @@ import com.coffee.trace.entity.BatchEntity;
 import com.coffee.trace.repository.BatchRepository;
 import com.coffee.trace.repository.FarmActivityRepository;
 import com.coffee.trace.repository.LedgerRefRepository;
+import com.coffee.trace.service.QrCodeService;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,13 +20,16 @@ public class TraceController {
     private final BatchRepository        batchRepository;
     private final FarmActivityRepository farmActivityRepository;
     private final LedgerRefRepository    ledgerRefRepository;
+    private final QrCodeService          qrCodeService;
 
     public TraceController(BatchRepository batchRepository,
                            FarmActivityRepository farmActivityRepository,
-                           LedgerRefRepository ledgerRefRepository) {
+                           LedgerRefRepository ledgerRefRepository,
+                           QrCodeService qrCodeService) {
         this.batchRepository        = batchRepository;
         this.farmActivityRepository = farmActivityRepository;
         this.ledgerRefRepository    = ledgerRefRepository;
+        this.qrCodeService          = qrCodeService;
     }
 
     /**
@@ -61,11 +66,12 @@ public class TraceController {
     }
 
     /**
-     * GET /api/qr/{publicCode} — public endpoint, delegates QR generation to Unit-3's QrCodeService.
-     * Returns 501 until Unit-3 is integrated.
+     * GET /api/qr/{publicCode} — public endpoint, generates QR code PNG for the trace URL.
      */
-    @GetMapping("/api/qr/{publicCode}")
+    @GetMapping(value = "/api/qr/{publicCode}", produces = MediaType.IMAGE_PNG_VALUE)
     public ResponseEntity<byte[]> qr(@PathVariable String publicCode) {
-        return ResponseEntity.status(501).build();
+        return batchRepository.findByPublicCode(publicCode)
+                .map(b -> ResponseEntity.ok(qrCodeService.generateQrPng(publicCode)))
+                .orElse(ResponseEntity.notFound().build());
     }
 }
