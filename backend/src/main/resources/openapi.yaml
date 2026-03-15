@@ -258,7 +258,7 @@ paths:
   /api/transfer/request:
     post:
       tags: [Roaster]
-      summary: Request transfer of roast batch to Org2 (body: { batchId, toMSP })
+      summary: "Request transfer of roast batch to Org2 (body: { batchId, toMSP })"
       requestBody:
         required: true
         content:
