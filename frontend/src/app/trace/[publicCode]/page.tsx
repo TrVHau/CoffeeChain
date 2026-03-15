@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { apiClient } from '@/lib/api/client';
+import { TraceService, ApiError } from '@/lib/api/generated';
 import type { TraceResponse, BatchResponse } from '@/lib/api/types';
 import { TraceTimeline } from '@/components/TraceTimeline';
-import { AxiosError } from 'axios';
+// client.ts imported for side-effects: configures OpenAPI.BASE + OpenAPI.TOKEN
+import '@/lib/api/client';
 
 // ─── Loading skeleton ────────────────────────────────────────────────────────
 
@@ -61,6 +62,8 @@ export default function TracePage({
   const [error,   setError]   = useState('');
 
   useEffect(() => {
+    // CancelablePromise.cancel() dừng request khi component unmount
+    let request: ReturnType<typeof TraceService.getApiTrace> | null = null;
     let cancelled = false;
 
     async function fetchTrace() {
@@ -69,13 +72,12 @@ export default function TracePage({
       setError('');
       try {
         // /api/trace/{publicCode} không yêu cầu auth (security: [] trong openapi.yaml)
-        const res = await apiClient.get<TraceResponse>(
-          `/api/trace/${encodeURIComponent(publicCode)}`,
-        );
-        if (!cancelled) setData(res.data);
+        request = TraceService.getApiTrace(publicCode);
+        const data = (await request) as unknown as TraceResponse;
+        if (!cancelled) setData(data);
       } catch (err) {
         if (cancelled) return;
-        if (err instanceof AxiosError && err.response?.status === 404) {
+        if (err instanceof ApiError && err.status === 404) {
           setNotFound(true);
         } else {
           setError(
@@ -88,7 +90,10 @@ export default function TracePage({
     }
 
     void fetchTrace();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      request?.cancel();
+    };
   }, [publicCode]);
 
   // ─── Build batches array: parentChain (oldest→newest) + batch (newest) ───

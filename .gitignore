@@ -122,3 +122,5 @@ ipfs-data/
 *.orig
 *.patch
 .github
+frontend/README.md
+frontend/TESTING.md

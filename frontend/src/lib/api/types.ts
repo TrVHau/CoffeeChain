@@ -1,9 +1,12 @@
 /**
- * Types aligned with openapi.yaml — Unit-2 v1.0.0 (merged)
- * Schema source: backend/src/main/resources/openapi.yaml
- * To regenerate from spec: npm run generate:api
+ * App-level types — aligned with lib/api/generated/ (openapi-typescript-codegen).
+ * Source: backend/src/main/resources/openapi.yaml | Re-generate: npm run generate:api
+ *
+ * Design: stricter than generated (required fields, typed enums vs all-optional strings).
+ * Components import from here. Generated/ used for service calls (TraceService, etc.).
  */
 
+// ─── Enums ───────────────────────────────────────────────────────────────
 export type BatchType =
   | 'HARVEST'
   | 'PROCESSED'
@@ -19,7 +22,8 @@ export type BatchStatus =
   | 'IN_STOCK'
   | 'SOLD';
 
-/** POST /api/auth/login → 200 */
+// ─── Core types (aligned with generated/models/) ──────────────────────────────
+/** POST /api/auth/login → 200 (aligned with generated/models/AuthResponse) */
 export interface AuthResponse {
   token:  string;
   userId: string;
@@ -27,7 +31,7 @@ export interface AuthResponse {
   org:    string;
 }
 
-/** Batch record returned from PostgreSQL index (GET /api/batches, /api/batch/{id}) */
+/** BatchResponse with strict enum types + EventIndexer metadata (Unit-3) */
 export interface BatchResponse {
   batchId:       string;
   publicCode:    string;
@@ -41,22 +45,21 @@ export interface BatchResponse {
   evidenceUri:   string | null;
   createdAt:     string;          // ISO-8601
   updatedAt:     string;
-  metadata?:     Record<string, string>; // jsonb from EventIndexer
+  metadata?:     Record<string, string>; // EventIndexer jsonb (Unit-3)
 }
 
-/** Farm activity from FARM_ACTIVITY_RECORDED event (EventIndexer) */
+/** FarmActivityItem + EventIndexer ledger ref fields (Unit-3) */
 export interface FarmActivityItem {
   activityType: string;
-  activityDate: string;   // format: YYYY-MM-DD
+  activityDate: string;   // YYYY-MM-DD
   note:         string;
   evidenceHash: string;
   evidenceUri:  string;
-  // Populated by EventIndexer — present if backend includes them
-  txId?:        string;
-  blockNumber?: string;
+  txId?:        string;   // EventIndexer
+  blockNumber?: string;   // EventIndexer
 }
 
-/** Fabric ledger event reference stored by EventIndexer */
+/** LedgerRefItem (aligned with generated/models/LedgerRefItem) */
 export interface LedgerRefItem {
   eventName:   string;
   txId:        string;
@@ -64,15 +67,15 @@ export interface LedgerRefItem {
   createdAt:   string;  // ISO-8601
 }
 
-/** GET /api/trace/{publicCode} → 200 */
+// ─── Composite types ────────────────────────────────────────────────────────────────/** GET /api/trace/{publicCode} → 200 (aligned with generated/models/TraceResponse) */
 export interface TraceResponse {
-  batch:          BatchResponse;      // The queried batch (usually PACKAGED)
-  parentChain:    BatchResponse[];    // Parent batches oldest → newest
+  batch:          BatchResponse;
+  parentChain:    BatchResponse[];
   farmActivities: FarmActivityItem[];
   ledgerRefs:     LedgerRefItem[];
 }
 
-/** Internal — used by TraceTimeline to represent a rendered step */
+/** Internal — used by TraceTimeline to render a single step */
 export interface TraceStep {
   batchType:     BatchType;
   date:          string;

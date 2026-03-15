@@ -1,10 +1,11 @@
 import axios, { type AxiosError } from 'axios';
+import { OpenAPI } from './generated';
 
 // Khớp với STORAGE_KEY trong AuthContext.tsx
 const STORAGE_KEY = 'auth_user';
 
 export const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080',
+  baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || '',
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -47,3 +48,21 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   },
 );
+
+// ─── Generated OpenAPI client — cấu hình BASE URL và auth token resolver ──────
+// Dùng '' (same-origin) khi không có env var → khớp với mock routes trong /app/api/
+OpenAPI.BASE = process.env.NEXT_PUBLIC_API_BASE_URL || '';
+OpenAPI.TOKEN = async (): Promise<string> => {
+  if (typeof window !== 'undefined') {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      try {
+        const auth = JSON.parse(stored) as { token: string };
+        return auth.token ?? '';
+      } catch {
+        // Corrupt entry — login page sẽ xử lý
+      }
+    }
+  }
+  return '';
+};
