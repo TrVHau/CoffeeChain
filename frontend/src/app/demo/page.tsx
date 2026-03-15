@@ -102,7 +102,7 @@ const MOCK_ACTIVITIES: FarmActivityItem[] = [
     evidenceHash: '',
     evidenceUri:  '',
     txId:         'tx91a2b3c4d5e6f708091a2b3c4',
-    blockNumber:  '95',
+    blockNumber:  95,
   },
   {
     activityType: 'FERTILIZING',
@@ -111,7 +111,7 @@ const MOCK_ACTIVITIES: FarmActivityItem[] = [
     evidenceHash: '',
     evidenceUri:  '',
     txId:         'txb2c3d4e5f607182930a1b2c3',
-    blockNumber:  '101',
+    blockNumber:  101,
   },
   {
     activityType: 'HARVESTING',
@@ -120,7 +120,7 @@ const MOCK_ACTIVITIES: FarmActivityItem[] = [
     evidenceHash: '',
     evidenceUri:  '',
     txId:         'txc3d4e5f6071829304142a3b4',
-    blockNumber:  '128',
+    blockNumber:  128,
   },
 ];
 

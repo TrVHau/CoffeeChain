@@ -117,26 +117,27 @@ function LoginForm() {
           </button>
         </form>
 
-        {process.env.NODE_ENV === 'development' && (
-          <details className="mt-6">
-            <summary className="cursor-pointer text-xs text-slate-400 hover:text-slate-600">
-              Test users (dev only)
-            </summary>
-            <ul className="mt-2 space-y-0.5 text-xs text-slate-500">
-              {(['farmer_alice', 'processor_bob', 'roaster_charlie', 'packager_dave', 'retailer_eve'] as const).map(u => (
-                <li key={u}>
-                  <button
-                    type="button"
-                    onClick={() => setUserId(u)}
-                    className="underline hover:text-rose-700"
-                  >
-                    {u}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </details>
-        )}
+        <details className="mt-6">
+          <summary className="cursor-pointer text-xs text-slate-400 hover:text-slate-600">
+            Tài khoản demo
+          </summary>
+          <p className="mt-2 text-xs text-slate-500">
+            Mật khẩu mặc định: <span className="font-semibold text-rose-700">pw123</span>
+          </p>
+          <ul className="mt-2 space-y-0.5 text-xs text-slate-500">
+            {(['farmer_alice', 'processor_bob', 'roaster_charlie', 'packager_dave', 'retailer_eve'] as const).map(u => (
+              <li key={u}>
+                <button
+                  type="button"
+                  onClick={() => setUserId(u)}
+                  className="underline hover:text-rose-700"
+                >
+                  {u}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
       </div>
     </main>
   );

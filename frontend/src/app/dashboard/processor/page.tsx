@@ -69,7 +69,7 @@ export default function ProcessorDashboardPage() {
     try {
       await dashboardApi.createProcessed(form);
       setForm((p) => ({ ...INITIAL_FORM, parentBatchId: p.parentBatchId }));
-      setMessage('Tao Processed batch thanh cong.');
+      setMessage('Tạo Processed batch thành công.');
       await refresh();
     } catch (e) {
       setError(getApiErrorMessage(e));
@@ -83,30 +83,30 @@ export default function ProcessorDashboardPage() {
     setMessage('');
     try {
       await dashboardApi.updateProcessedStatus(batchId, newStatus);
-      setMessage(`Da cap nhat trang thai -> ${newStatus}.`);
+      setMessage(`Đã cập nhật trạng thái -> ${newStatus}.`);
       await refresh();
     } catch (e) {
       setError(getApiErrorMessage(e));
     }
   }
 
-  if (!ready) return <LoadingState text="Dang xac thuc quyen truy cap..." />;
+  if (!ready) return <LoadingState text="Đang xác thực quyền truy cập..." />;
 
   return (
-    <DashboardShell title="Processor Dashboard" subtitle="Tao Processed batch tu Harvest da hoan thanh">
+    <DashboardShell title="Processor Dashboard" subtitle="Tạo Processed batch từ Harvest đã hoàn thành">
       <div className="grid gap-6 xl:grid-cols-[380px,1fr]">
         <section className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-rose-900">Tao Processed batch</h2>
+          <h2 className="text-base font-semibold text-rose-900">Tạo Processed batch</h2>
           <form onSubmit={handleCreate} className="mt-4 space-y-3">
             <label className="block text-sm">
-              <span className="mb-1 block font-medium text-slate-700">Parent Harvest</span>
+              <span className="mb-1 block font-medium text-slate-700">Harvest nguồn</span>
               <select
                 value={form.parentBatchId}
                 onChange={(e) => setForm((p) => ({ ...p, parentBatchId: e.target.value }))}
                 required
                 className="w-full rounded-lg border border-rose-200 px-3 py-2 outline-none ring-rose-400 focus:ring"
               >
-                {harvestParents.length === 0 && <option value="">Khong co parent hop le</option>}
+                {harvestParents.length === 0 && <option value="">Không có parent hợp lệ</option>}
                 {harvestParents.map((item) => (
                   <option key={item.batchId} value={item.batchId}>
                     {item.publicCode} - {item.batchId.slice(0, 8)}
@@ -115,7 +115,7 @@ export default function ProcessorDashboardPage() {
               </select>
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block font-medium text-slate-700">Processing method</span>
+              <span className="mb-1 block font-medium text-slate-700">Phương pháp sơ chế</span>
               <select
                 value={form.processingMethod}
                 onChange={(e) => setForm((p) => ({ ...p, processingMethod: e.target.value }))}
@@ -125,7 +125,7 @@ export default function ProcessorDashboardPage() {
               </select>
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block font-medium text-slate-700">Start date</span>
+              <span className="mb-1 block font-medium text-slate-700">Ngày bắt đầu</span>
               <input
                 type="date"
                 value={form.startDate}
@@ -135,7 +135,7 @@ export default function ProcessorDashboardPage() {
               />
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block font-medium text-slate-700">End date</span>
+              <span className="mb-1 block font-medium text-slate-700">Ngày kết thúc</span>
               <input
                 type="date"
                 value={form.endDate}
@@ -145,7 +145,7 @@ export default function ProcessorDashboardPage() {
               />
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block font-medium text-slate-700">Facility name</span>
+              <span className="mb-1 block font-medium text-slate-700">Tên cơ sở sơ chế</span>
               <input
                 value={form.facilityName}
                 onChange={(e) => setForm((p) => ({ ...p, facilityName: e.target.value }))}
@@ -154,7 +154,7 @@ export default function ProcessorDashboardPage() {
               />
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block font-medium text-slate-700">Weight (kg)</span>
+              <span className="mb-1 block font-medium text-slate-700">Khối lượng (kg)</span>
               <input
                 type="number"
                 min="0.1"
@@ -170,36 +170,36 @@ export default function ProcessorDashboardPage() {
               disabled={submitting || harvestParents.length === 0}
               className="w-full rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800 disabled:opacity-50"
             >
-              {submitting ? 'Dang tao...' : 'Tao Processed batch'}
+              {submitting ? 'Đang tạo...' : 'Tạo Processed batch'}
             </button>
           </form>
         </section>
 
         <section className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-rose-900">Danh sach Processed</h2>
+            <h2 className="text-base font-semibold text-rose-900">Danh sách Processed</h2>
             <button
               type="button"
               onClick={() => void refresh()}
               className="rounded-lg border border-rose-200 px-3 py-1.5 text-sm text-rose-700 hover:bg-rose-50"
             >
-              Lam moi
+              Làm mới
             </button>
           </div>
           {message && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</p>}
           {error && <ErrorState message={error} />}
           {loading && <LoadingState />}
-          {!loading && !error && processed.length === 0 && <EmptyState text="Chua co Processed batch nao." />}
+          {!loading && !error && processed.length === 0 && <EmptyState text="Chưa có Processed batch nào." />}
 
           {!loading && !error && processed.length > 0 && (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="border-b border-rose-100 text-left text-slate-500">
-                    <th className="px-2 py-2 font-medium">Public code</th>
-                    <th className="px-2 py-2 font-medium">Status</th>
-                    <th className="px-2 py-2 font-medium">Updated</th>
-                    <th className="px-2 py-2 font-medium">Actions</th>
+                    <th className="px-2 py-2 font-medium">Mã công khai</th>
+                    <th className="px-2 py-2 font-medium">Trạng thái</th>
+                    <th className="px-2 py-2 font-medium">Cập nhật</th>
+                    <th className="px-2 py-2 font-medium">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>

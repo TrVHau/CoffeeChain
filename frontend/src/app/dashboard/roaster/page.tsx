@@ -81,7 +81,7 @@ export default function RoasterDashboardPage() {
     try {
       await dashboardApi.createRoast(createForm);
       setCreateForm((p) => ({ ...INITIAL_CREATE, parentBatchId: p.parentBatchId, roastProfile: p.roastProfile }));
-      setMessage('Tao Roast batch thanh cong.');
+      setMessage('Tạo Roast batch thành công.');
       await refresh();
     } catch (e) {
       setError(getApiErrorMessage(e));
@@ -99,7 +99,7 @@ export default function RoasterDashboardPage() {
     try {
       await dashboardApi.addEvidence(selectedRoastId, evidenceForm);
       setEvidenceForm(INITIAL_EVIDENCE);
-      setMessage('Da cap nhat evidence.');
+      setMessage('Đã cập nhật minh chứng.');
       await refresh();
     } catch (e) {
       setError(getApiErrorMessage(e));
@@ -113,7 +113,7 @@ export default function RoasterDashboardPage() {
     setMessage('');
     try {
       await dashboardApi.updateRoastStatus(batchId, newStatus);
-      setMessage(`Da cap nhat trang thai -> ${newStatus}.`);
+      setMessage(`Đã cập nhật trạng thái -> ${newStatus}.`);
       await refresh();
     } catch (e) {
       setError(getApiErrorMessage(e));
@@ -125,7 +125,7 @@ export default function RoasterDashboardPage() {
     setMessage('');
     try {
       await dashboardApi.requestTransfer(batchId);
-      setMessage('Da gui yeu cau transfer sang Org2MSP.');
+      setMessage('Đã gửi yêu cầu chuyển giao sang Org2MSP.');
       await refresh();
     } catch (e) {
       setError(getApiErrorMessage(e));
@@ -137,24 +137,24 @@ export default function RoasterDashboardPage() {
     [roasts, selectedRoastId]
   );
 
-  if (!ready) return <LoadingState text="Dang xac thuc quyen truy cap..." />;
+  if (!ready) return <LoadingState text="Đang xác thực quyền truy cập..." />;
 
   return (
-    <DashboardShell title="Roaster Dashboard" subtitle="Tao Roast, gan evidence va chuyen giao">
+    <DashboardShell title="Roaster Dashboard" subtitle="Tạo Roast, gắn minh chứng và chuyển giao">
       <div className="grid gap-6 xl:grid-cols-[420px,1fr]">
         <div className="space-y-6">
           <section className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
-            <h2 className="text-base font-semibold text-rose-900">Tao Roast batch</h2>
+            <h2 className="text-base font-semibold text-rose-900">Tạo Roast batch</h2>
             <form onSubmit={handleCreate} className="mt-4 space-y-3">
               <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Parent Processed</span>
+                <span className="mb-1 block font-medium text-slate-700">Processed nguồn</span>
                 <select
                   value={createForm.parentBatchId}
                   onChange={(e) => setCreateForm((p) => ({ ...p, parentBatchId: e.target.value }))}
                   required
                   className="w-full rounded-lg border border-rose-200 px-3 py-2 outline-none ring-rose-400 focus:ring"
                 >
-                  {parents.length === 0 && <option value="">Khong co parent hop le</option>}
+                  {parents.length === 0 && <option value="">Không có parent hợp lệ</option>}
                   {parents.map((item) => (
                     <option key={item.batchId} value={item.batchId}>
                       {item.publicCode} - {item.batchId.slice(0, 8)}
@@ -173,7 +173,7 @@ export default function RoasterDashboardPage() {
                 </select>
               </label>
               <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Roast date</span>
+                <span className="mb-1 block font-medium text-slate-700">Ngày rang</span>
                 <input
                   type="date"
                   value={createForm.roastDate}
@@ -183,7 +183,7 @@ export default function RoasterDashboardPage() {
                 />
               </label>
               <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Roast duration (minutes)</span>
+                <span className="mb-1 block font-medium text-slate-700">Thời gian rang (phút)</span>
                 <input
                   type="number"
                   min="1"
@@ -194,7 +194,7 @@ export default function RoasterDashboardPage() {
                 />
               </label>
               <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Weight (kg)</span>
+                <span className="mb-1 block font-medium text-slate-700">Khối lượng (kg)</span>
                 <input
                   type="number"
                   min="0.1"
@@ -210,13 +210,13 @@ export default function RoasterDashboardPage() {
                 disabled={submittingCreate || parents.length === 0}
                 className="w-full rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800 disabled:opacity-50"
               >
-                {submittingCreate ? 'Dang tao...' : 'Tao Roast batch'}
+                {submittingCreate ? 'Đang tạo...' : 'Tạo Roast batch'}
               </button>
             </form>
           </section>
 
           <section className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
-            <h2 className="text-base font-semibold text-rose-900">Them evidence</h2>
+            <h2 className="text-base font-semibold text-rose-900">Thêm minh chứng</h2>
             <form onSubmit={handleAddEvidence} className="mt-4 space-y-3">
               <label className="block text-sm">
                 <span className="mb-1 block font-medium text-slate-700">Roast batch</span>
@@ -225,7 +225,7 @@ export default function RoasterDashboardPage() {
                   onChange={(e) => setSelectedRoastId(e.target.value)}
                   className="w-full rounded-lg border border-rose-200 px-3 py-2 outline-none ring-rose-400 focus:ring"
                 >
-                  {roasts.length === 0 && <option value="">Khong co Roast batch</option>}
+                  {roasts.length === 0 && <option value="">Không có Roast batch</option>}
                   {roasts.map((item) => (
                     <option key={item.batchId} value={item.batchId}>
                       {item.publicCode} - {item.status}
@@ -234,7 +234,7 @@ export default function RoasterDashboardPage() {
                 </select>
               </label>
               <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Evidence hash (SHA-256)</span>
+                <span className="mb-1 block font-medium text-slate-700">Mã băm minh chứng (SHA-256)</span>
                 <input
                   value={evidenceForm.evidenceHash}
                   onChange={(e) => setEvidenceForm((p) => ({ ...p, evidenceHash: e.target.value }))}
@@ -243,7 +243,7 @@ export default function RoasterDashboardPage() {
                 />
               </label>
               <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Evidence URI</span>
+                <span className="mb-1 block font-medium text-slate-700">URI minh chứng</span>
                 <input
                   value={evidenceForm.evidenceUri}
                   onChange={(e) => setEvidenceForm((p) => ({ ...p, evidenceUri: e.target.value }))}
@@ -257,11 +257,11 @@ export default function RoasterDashboardPage() {
                 disabled={submittingEvidence || !selectedRoastId}
                 className="w-full rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800 disabled:opacity-50"
               >
-                {submittingEvidence ? 'Dang cap nhat...' : 'Luu evidence'}
+                {submittingEvidence ? 'Đang cập nhật...' : 'Lưu minh chứng'}
               </button>
               {selectedRoast && (
                 <p className="text-xs text-slate-500">
-                  Batch duoc chon: {selectedRoast.publicCode} ({selectedRoast.status})
+                  Batch được chọn: {selectedRoast.publicCode} ({selectedRoast.status})
                 </p>
               )}
             </form>
@@ -270,29 +270,29 @@ export default function RoasterDashboardPage() {
 
         <section className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-rose-900">Danh sach Roast</h2>
+            <h2 className="text-base font-semibold text-rose-900">Danh sách Roast</h2>
             <button
               type="button"
               onClick={() => void refresh()}
               className="rounded-lg border border-rose-200 px-3 py-1.5 text-sm text-rose-700 hover:bg-rose-50"
             >
-              Lam moi
+              Làm mới
             </button>
           </div>
           {message && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</p>}
           {error && <ErrorState message={error} />}
           {loading && <LoadingState />}
-          {!loading && !error && roasts.length === 0 && <EmptyState text="Chua co Roast batch nao." />}
+          {!loading && !error && roasts.length === 0 && <EmptyState text="Chưa có Roast batch nào." />}
 
           {!loading && !error && roasts.length > 0 && (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="border-b border-rose-100 text-left text-slate-500">
-                    <th className="px-2 py-2 font-medium">Public code</th>
-                    <th className="px-2 py-2 font-medium">Status</th>
-                    <th className="px-2 py-2 font-medium">Evidence</th>
-                    <th className="px-2 py-2 font-medium">Actions</th>
+                    <th className="px-2 py-2 font-medium">Mã công khai</th>
+                    <th className="px-2 py-2 font-medium">Trạng thái</th>
+                    <th className="px-2 py-2 font-medium">Minh chứng</th>
+                    <th className="px-2 py-2 font-medium">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -301,7 +301,7 @@ export default function RoasterDashboardPage() {
                       <td className="px-2 py-2 font-mono text-xs text-slate-700">{item.publicCode}</td>
                       <td className="px-2 py-2"><StatusBadge status={item.status} /></td>
                       <td className="px-2 py-2 text-xs text-slate-600">
-                        {item.evidenceHash ? 'Da co evidence' : 'Chua co evidence'}
+                        {item.evidenceHash ? 'Đã có minh chứng' : 'Chưa có minh chứng'}
                       </td>
                       <td className="px-2 py-2">
                         <div className="flex flex-wrap gap-2">
@@ -329,7 +329,7 @@ export default function RoasterDashboardPage() {
                               onClick={() => void requestTransfer(item.batchId)}
                               className="rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-200"
                             >
-                              Request transfer
+                              Yêu cầu chuyển giao
                             </button>
                           )}
                         </div>

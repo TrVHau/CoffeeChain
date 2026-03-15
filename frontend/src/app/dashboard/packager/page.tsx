@@ -58,7 +58,7 @@ export default function PackagerDashboardPage() {
     setMessage('');
     try {
       await dashboardApi.acceptTransfer(batchId);
-      setMessage('Da accept transfer thanh cong.');
+      setMessage('Đã nhận chuyển giao thành công.');
       await refresh();
     } catch (e) {
       setError(getApiErrorMessage(e));
@@ -73,7 +73,7 @@ export default function PackagerDashboardPage() {
     try {
       await dashboardApi.createPackaged(form);
       setForm((p) => ({ ...INITIAL_FORM, parentBatchId: p.parentBatchId }));
-      setMessage('Da tao Packaged batch thanh cong.');
+      setMessage('Đã tạo Packaged batch thành công.');
       await refresh();
     } catch (e) {
       setError(getApiErrorMessage(e));
@@ -98,16 +98,16 @@ export default function PackagerDashboardPage() {
     }
   }
 
-  if (!ready) return <LoadingState text="Dang xac thuc quyen truy cap..." />;
+  if (!ready) return <LoadingState text="Đang xác thực quyền truy cập..." />;
 
   return (
-    <DashboardShell title="Packager Dashboard" subtitle="Accept transfer, tao package va tai QR">
+    <DashboardShell title="Packager Dashboard" subtitle="Nhận chuyển giao, tạo package và tải QR">
       <div className="grid gap-6 xl:grid-cols-[420px,1fr]">
         <div className="space-y-6">
           <section className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
-            <h2 className="text-base font-semibold text-rose-900">Roast cho accept transfer</h2>
+            <h2 className="text-base font-semibold text-rose-900">Roast chờ nhận chuyển giao</h2>
             {roastPending.length === 0 && (
-              <p className="mt-3 text-sm text-slate-500">Khong co Roast nao dang transfer pending.</p>
+              <p className="mt-3 text-sm text-slate-500">Không có Roast nào đang chờ chuyển giao.</p>
             )}
             <div className="mt-3 space-y-2">
               {roastPending.map((item) => (
@@ -121,7 +121,7 @@ export default function PackagerDashboardPage() {
                     onClick={() => void acceptTransfer(item.batchId)}
                     className="rounded-md bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-200"
                   >
-                    Accept transfer
+                    Nhận chuyển giao
                   </button>
                 </div>
               ))}
@@ -129,17 +129,17 @@ export default function PackagerDashboardPage() {
           </section>
 
           <section className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
-            <h2 className="text-base font-semibold text-rose-900">Tao Packaged batch</h2>
+            <h2 className="text-base font-semibold text-rose-900">Tạo Packaged batch</h2>
             <form onSubmit={createPackaged} className="mt-4 space-y-3">
               <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Parent Roast (TRANSFERRED)</span>
+                <span className="mb-1 block font-medium text-slate-700">Roast nguồn (TRANSFERRED)</span>
                 <select
                   value={form.parentBatchId}
                   onChange={(e) => setForm((p) => ({ ...p, parentBatchId: e.target.value }))}
                   required
                   className="w-full rounded-lg border border-rose-200 px-3 py-2 outline-none ring-rose-400 focus:ring"
                 >
-                  {roastTransferred.length === 0 && <option value="">Khong co Roast da transfer</option>}
+                  {roastTransferred.length === 0 && <option value="">Không có Roast đã chuyển giao</option>}
                   {roastTransferred.map((item) => (
                     <option key={item.batchId} value={item.batchId}>
                       {item.publicCode} - {item.batchId.slice(0, 8)}
@@ -148,7 +148,7 @@ export default function PackagerDashboardPage() {
                 </select>
               </label>
               <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Package weight</span>
+                <span className="mb-1 block font-medium text-slate-700">Khối lượng gói</span>
                 <input
                   value={form.packageWeight}
                   onChange={(e) => setForm((p) => ({ ...p, packageWeight: e.target.value }))}
@@ -158,7 +158,7 @@ export default function PackagerDashboardPage() {
                 />
               </label>
               <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Package date</span>
+                <span className="mb-1 block font-medium text-slate-700">Ngày đóng gói</span>
                 <input
                   type="date"
                   value={form.packageDate}
@@ -168,7 +168,7 @@ export default function PackagerDashboardPage() {
                 />
               </label>
               <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Expiry date</span>
+                <span className="mb-1 block font-medium text-slate-700">Ngày hết hạn</span>
                 <input
                   type="date"
                   value={form.expiryDate}
@@ -178,7 +178,7 @@ export default function PackagerDashboardPage() {
                 />
               </label>
               <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Package count</span>
+                <span className="mb-1 block font-medium text-slate-700">Số lượng gói</span>
                 <input
                   value={form.packageCount}
                   onChange={(e) => setForm((p) => ({ ...p, packageCount: e.target.value }))}
@@ -191,7 +191,7 @@ export default function PackagerDashboardPage() {
                 disabled={submitting || roastTransferred.length === 0}
                 className="w-full rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800 disabled:opacity-50"
               >
-                {submitting ? 'Dang tao...' : 'Tao Packaged batch'}
+                {submitting ? 'Đang tạo...' : 'Tạo Packaged batch'}
               </button>
             </form>
           </section>
@@ -199,28 +199,28 @@ export default function PackagerDashboardPage() {
 
         <section className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-rose-900">Danh sach Packaged</h2>
+            <h2 className="text-base font-semibold text-rose-900">Danh sách Packaged</h2>
             <button
               type="button"
               onClick={() => void refresh()}
               className="rounded-lg border border-rose-200 px-3 py-1.5 text-sm text-rose-700 hover:bg-rose-50"
             >
-              Lam moi
+              Làm mới
             </button>
           </div>
           {message && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</p>}
           {error && <ErrorState message={error} />}
           {loading && <LoadingState />}
-          {!loading && !error && packaged.length === 0 && <EmptyState text="Chua co Packaged batch nao." />}
+          {!loading && !error && packaged.length === 0 && <EmptyState text="Chưa có Packaged batch nào." />}
 
           {!loading && !error && packaged.length > 0 && (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="border-b border-rose-100 text-left text-slate-500">
-                    <th className="px-2 py-2 font-medium">Public code</th>
-                    <th className="px-2 py-2 font-medium">Status</th>
-                    <th className="px-2 py-2 font-medium">Updated</th>
+                    <th className="px-2 py-2 font-medium">Mã công khai</th>
+                    <th className="px-2 py-2 font-medium">Trạng thái</th>
+                    <th className="px-2 py-2 font-medium">Cập nhật</th>
                     <th className="px-2 py-2 font-medium">QR</th>
                   </tr>
                 </thead>
@@ -236,7 +236,7 @@ export default function PackagerDashboardPage() {
                           onClick={() => void downloadQr(item.batchId)}
                           className="rounded-md bg-rose-100 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-200"
                         >
-                          Download QR
+                          Tải QR
                         </button>
                       </td>
                     </tr>

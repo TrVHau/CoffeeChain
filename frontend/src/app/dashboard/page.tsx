@@ -20,7 +20,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-rose-50">
-      <p className="text-sm text-rose-700/70">Dang chuyen huong...</p>
+      <p className="text-sm text-rose-700/70">Đang chuyển hướng...</p>
     </div>
   );
 }

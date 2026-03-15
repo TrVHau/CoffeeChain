@@ -55,8 +55,10 @@ export interface FarmActivityItem {
   note:         string;
   evidenceHash: string;
   evidenceUri:  string;
+  recordedBy?:  string;
+  recordedAt?:  string;
   txId?:        string;   // EventIndexer
-  blockNumber?: string;   // EventIndexer
+  blockNumber?: number;   // EventIndexer
 }
 
 /** LedgerRefItem (aligned with generated/models/LedgerRefItem) */

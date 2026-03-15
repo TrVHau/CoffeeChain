@@ -41,6 +41,10 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 const STORAGE_KEY = 'auth_user';
 
+function normalizeToken(token: string): string {
+  return token.replace(/^Bearer\s+/i, '').trim();
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -58,10 +62,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = (userId: string, token: string, role: UserRole) => {
-    const authUser: AuthUser = { userId, token, role };
+    const normalizedToken = normalizeToken(token);
+    const authUser: AuthUser = { userId, token: normalizedToken, role };
     setUser(authUser);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(authUser));
-    document.cookie = `auth_token=${token}; path=/; SameSite=Lax`;
+    document.cookie = `auth_token=${normalizedToken}; path=/; SameSite=Lax`;
     document.cookie = `user_role=${role}; path=/; SameSite=Lax`;
   };
 

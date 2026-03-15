@@ -57,7 +57,7 @@ export default function FarmerDashboardPage() {
     try {
       await dashboardApi.createHarvest(form);
       setForm(INITIAL_FORM);
-      setMessage('Tao Harvest batch thanh cong.');
+      setMessage('Tạo Harvest batch thành công.');
       await refresh();
     } catch (e) {
       setError(getApiErrorMessage(e));
@@ -71,7 +71,7 @@ export default function FarmerDashboardPage() {
     setMessage('');
     try {
       await dashboardApi.updateHarvestStatus(batchId, newStatus);
-      setMessage(`Da cap nhat trang thai -> ${newStatus}.`);
+      setMessage(`Đã cập nhật trạng thái -> ${newStatus}.`);
       await refresh();
     } catch (e) {
       setError(getApiErrorMessage(e));
@@ -79,17 +79,17 @@ export default function FarmerDashboardPage() {
   }
 
   if (!ready) {
-    return <LoadingState text="Dang xac thuc quyen truy cap..." />;
+    return <LoadingState text="Đang xác thực quyền truy cập..." />;
   }
 
   return (
-    <DashboardShell title="Farmer Dashboard" subtitle="Quan ly Harvest batch va nhat ky canh tac">
+    <DashboardShell title="Farmer Dashboard" subtitle="Quản lý Harvest batch và nhật ký canh tác">
       <div className="grid gap-6 xl:grid-cols-[380px,1fr]">
         <section className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-rose-900">Tao Harvest batch</h2>
+          <h2 className="text-base font-semibold text-rose-900">Tạo Harvest batch</h2>
           <form onSubmit={handleCreate} className="mt-4 space-y-3">
             <label className="block text-sm">
-              <span className="mb-1 block font-medium text-slate-700">Farm location</span>
+              <span className="mb-1 block font-medium text-slate-700">Địa điểm nông trại</span>
               <input
                 value={form.farmLocation}
                 onChange={(e) => setForm((p) => ({ ...p, farmLocation: e.target.value }))}
@@ -99,7 +99,7 @@ export default function FarmerDashboardPage() {
               />
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block font-medium text-slate-700">Harvest date</span>
+              <span className="mb-1 block font-medium text-slate-700">Ngày thu hoạch</span>
               <input
                 type="date"
                 value={form.harvestDate}
@@ -109,7 +109,7 @@ export default function FarmerDashboardPage() {
               />
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block font-medium text-slate-700">Coffee variety</span>
+              <span className="mb-1 block font-medium text-slate-700">Giống cà phê</span>
               <input
                 value={form.coffeeVariety}
                 onChange={(e) => setForm((p) => ({ ...p, coffeeVariety: e.target.value }))}
@@ -119,7 +119,7 @@ export default function FarmerDashboardPage() {
               />
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block font-medium text-slate-700">Weight (kg)</span>
+              <span className="mb-1 block font-medium text-slate-700">Khối lượng (kg)</span>
               <input
                 type="number"
                 min="0.1"
@@ -136,37 +136,37 @@ export default function FarmerDashboardPage() {
               disabled={submitting}
               className="w-full rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-800 disabled:opacity-50"
             >
-              {submitting ? 'Dang tao...' : 'Tao batch'}
+              {submitting ? 'Đang tạo...' : 'Tạo batch'}
             </button>
           </form>
         </section>
 
         <section className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-rose-900">Danh sach Harvest</h2>
+            <h2 className="text-base font-semibold text-rose-900">Danh sách Harvest</h2>
             <button
               type="button"
               onClick={() => void refresh()}
               className="rounded-lg border border-rose-200 px-3 py-1.5 text-sm text-rose-700 hover:bg-rose-50"
             >
-              Lam moi
+              Làm mới
             </button>
           </div>
 
           {message && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</p>}
           {error && <ErrorState message={error} />}
           {loading && <LoadingState />}
-          {!loading && !error && batches.length === 0 && <EmptyState text="Chua co Harvest batch nao." />}
+          {!loading && !error && batches.length === 0 && <EmptyState text="Chưa có Harvest batch nào." />}
 
           {!loading && !error && batches.length > 0 && (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="border-b border-rose-100 text-left text-slate-500">
-                    <th className="px-2 py-2 font-medium">Public code</th>
-                    <th className="px-2 py-2 font-medium">Status</th>
-                    <th className="px-2 py-2 font-medium">Updated</th>
-                    <th className="px-2 py-2 font-medium">Actions</th>
+                    <th className="px-2 py-2 font-medium">Mã công khai</th>
+                    <th className="px-2 py-2 font-medium">Trạng thái</th>
+                    <th className="px-2 py-2 font-medium">Cập nhật</th>
+                    <th className="px-2 py-2 font-medium">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -181,7 +181,7 @@ export default function FarmerDashboardPage() {
                             href={`/dashboard/farmer/${encodeURIComponent(batch.batchId)}`}
                             className="rounded-md border border-rose-200 px-2 py-1 text-xs text-rose-700 hover:bg-rose-50"
                           >
-                            Chi tiet
+                            Chi tiết
                           </Link>
                           {canMoveTo(batch.status, 'IN_PROCESS') && (
                             <button

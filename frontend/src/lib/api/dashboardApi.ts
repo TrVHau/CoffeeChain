@@ -100,7 +100,7 @@ export function getApiErrorMessage(error: unknown): string {
     if (axiosError.message) return axiosError.message;
   }
   if (error instanceof Error) return error.message;
-  return 'Da xay ra loi. Vui long thu lai.';
+  return 'Đã xảy ra lỗi. Vui lòng thử lại.';
 }
 
 export interface BatchListFilters {

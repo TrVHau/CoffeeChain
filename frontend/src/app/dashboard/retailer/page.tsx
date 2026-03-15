@@ -38,7 +38,7 @@ export default function RetailerDashboardPage() {
     setMessage('');
     try {
       await dashboardApi.updateRetailStatus(batchId, 'IN_STOCK');
-      setMessage('Da cap nhat status -> IN_STOCK.');
+      setMessage('Đã cập nhật trạng thái -> IN_STOCK.');
       await refresh();
     } catch (e) {
       setError(getApiErrorMessage(e));
@@ -50,42 +50,42 @@ export default function RetailerDashboardPage() {
     setMessage('');
     try {
       await dashboardApi.updateRetailStatus(batchId, 'SOLD');
-      setMessage('Da cap nhat status -> SOLD.');
+      setMessage('Đã cập nhật trạng thái -> SOLD.');
       await refresh();
     } catch (e) {
       setError(getApiErrorMessage(e));
     }
   }
 
-  if (!ready) return <LoadingState text="Dang xac thuc quyen truy cap..." />;
+  if (!ready) return <LoadingState text="Đang xác thực quyền truy cập..." />;
 
   return (
-    <DashboardShell title="Retailer Dashboard" subtitle="Quan ly ton kho va trang thai ban le">
+    <DashboardShell title="Retailer Dashboard" subtitle="Quản lý tồn kho và trạng thái bán lẻ">
       <section className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-rose-900">Danh sach Packaged</h2>
+          <h2 className="text-base font-semibold text-rose-900">Danh sách Packaged</h2>
           <button
             type="button"
             onClick={() => void refresh()}
             className="rounded-lg border border-rose-200 px-3 py-1.5 text-sm text-rose-700 hover:bg-rose-50"
           >
-            Lam moi
+            Làm mới
           </button>
         </div>
         {message && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</p>}
         {error && <ErrorState message={error} />}
         {loading && <LoadingState />}
-        {!loading && !error && packaged.length === 0 && <EmptyState text="Chua co Packaged batch nao." />}
+        {!loading && !error && packaged.length === 0 && <EmptyState text="Chưa có Packaged batch nào." />}
 
         {!loading && !error && packaged.length > 0 && (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-rose-100 text-left text-slate-500">
-                  <th className="px-2 py-2 font-medium">Public code</th>
-                  <th className="px-2 py-2 font-medium">Status</th>
-                  <th className="px-2 py-2 font-medium">Owner</th>
-                  <th className="px-2 py-2 font-medium">Actions</th>
+                  <th className="px-2 py-2 font-medium">Mã công khai</th>
+                  <th className="px-2 py-2 font-medium">Trạng thái</th>
+                  <th className="px-2 py-2 font-medium">Chủ sở hữu</th>
+                  <th className="px-2 py-2 font-medium">Thao tác</th>
                 </tr>
               </thead>
               <tbody>

@@ -1,4 +1,4 @@
-export function LoadingState({ text = 'Dang tai du lieu...' }: { text?: string }) {
+export function LoadingState({ text = 'Đang tải dữ liệu...' }: { text?: string }) {
   return (
     <div className="rounded-2xl border border-rose-200 bg-white p-6 text-sm text-rose-800 shadow-sm">
       {text}

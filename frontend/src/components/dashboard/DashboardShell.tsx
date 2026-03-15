@@ -6,11 +6,11 @@ import { useAuth } from '@/lib/auth/useAuth';
 import type { UserRole } from '@/lib/auth/AuthContext';
 
 const ROLE_LINKS: Array<{ role: UserRole; href: string; label: string }> = [
-  { role: 'FARMER', href: '/dashboard/farmer', label: 'Farmer' },
-  { role: 'PROCESSOR', href: '/dashboard/processor', label: 'Processor' },
-  { role: 'ROASTER', href: '/dashboard/roaster', label: 'Roaster' },
-  { role: 'PACKAGER', href: '/dashboard/packager', label: 'Packager' },
-  { role: 'RETAILER', href: '/dashboard/retailer', label: 'Retailer' },
+  { role: 'FARMER', href: '/dashboard/farmer', label: 'Nông dân' },
+  { role: 'PROCESSOR', href: '/dashboard/processor', label: 'Sơ chế' },
+  { role: 'ROASTER', href: '/dashboard/roaster', label: 'Rang xay' },
+  { role: 'PACKAGER', href: '/dashboard/packager', label: 'Đóng gói' },
+  { role: 'RETAILER', href: '/dashboard/retailer', label: 'Bán lẻ' },
 ];
 
 interface DashboardShellProps {
@@ -43,7 +43,7 @@ export function DashboardShell({ title, subtitle, children }: DashboardShellProp
                 onClick={logout}
                 className="rounded-lg bg-rose-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-rose-800"
               >
-                Dang xuat
+                Đăng xuất
               </button>
             </div>
           </div>

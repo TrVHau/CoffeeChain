@@ -68,7 +68,7 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
     try {
       await dashboardApi.recordFarmActivity(params.id, form);
       setForm(INITIAL_ACTIVITY);
-      setMessage('Da ghi nhat ky canh tac.');
+      setMessage('Đã ghi nhật ký canh tác.');
       await loadBatch();
     } catch (e) {
       setError(getApiErrorMessage(e));
@@ -78,17 +78,17 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
   }
 
   if (!ready) {
-    return <LoadingState text="Dang xac thuc quyen truy cap..." />;
+    return <LoadingState text="Đang xác thực quyền truy cập..." />;
   }
 
   return (
-    <DashboardShell title="Farmer Batch Detail" subtitle={params.id}>
+    <DashboardShell title="Chi tiết Harvest batch" subtitle={params.id}>
       <div className="mb-4">
         <Link
           href="/dashboard/farmer"
           className="inline-flex rounded-lg border border-rose-200 px-3 py-1.5 text-sm text-rose-700 hover:bg-rose-50"
         >
-          Quay lai danh sach
+          Quay lại danh sách
         </Link>
       </div>
 
@@ -98,18 +98,18 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
       {!loading && batch && (
         <div className="grid gap-6 xl:grid-cols-[420px,1fr]">
           <section className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
-            <h2 className="text-base font-semibold text-rose-900">Thong tin batch</h2>
+            <h2 className="text-base font-semibold text-rose-900">Thông tin batch</h2>
             <dl className="mt-3 space-y-2 text-sm">
               <div><dt className="font-medium text-slate-500">Batch ID</dt><dd className="font-mono text-xs text-slate-800">{batch.batchId}</dd></div>
-              <div><dt className="font-medium text-slate-500">Public code</dt><dd className="font-mono text-xs text-slate-800">{batch.publicCode}</dd></div>
-              <div><dt className="font-medium text-slate-500">Status</dt><dd className="pt-1"><StatusBadge status={batch.status} /></dd></div>
-              <div><dt className="font-medium text-slate-500">Owner</dt><dd className="text-slate-700">{batch.ownerUserId} ({batch.ownerMsp})</dd></div>
+              <div><dt className="font-medium text-slate-500">Mã công khai</dt><dd className="font-mono text-xs text-slate-800">{batch.publicCode}</dd></div>
+              <div><dt className="font-medium text-slate-500">Trạng thái</dt><dd className="pt-1"><StatusBadge status={batch.status} /></dd></div>
+              <div><dt className="font-medium text-slate-500">Chủ sở hữu</dt><dd className="text-slate-700">{batch.ownerUserId} ({batch.ownerMsp})</dd></div>
             </dl>
 
-            <h3 className="mt-6 text-sm font-semibold text-rose-900">Them farm activity</h3>
+            <h3 className="mt-6 text-sm font-semibold text-rose-900">Thêm nhật ký canh tác</h3>
             <form onSubmit={handleSubmitActivity} className="mt-3 space-y-3">
               <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Activity type</span>
+                <span className="mb-1 block font-medium text-slate-700">Loại hoạt động</span>
                 <select
                   value={form.activityType}
                   onChange={(e) => setForm((p) => ({ ...p, activityType: e.target.value }))}
@@ -119,7 +119,7 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
                 </select>
               </label>
               <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Activity date</span>
+                <span className="mb-1 block font-medium text-slate-700">Ngày thực hiện</span>
                 <input
                   type="date"
                   value={form.activityDate}
@@ -129,7 +129,7 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
                 />
               </label>
               <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Note</span>
+                <span className="mb-1 block font-medium text-slate-700">Ghi chú</span>
                 <textarea
                   value={form.note}
                   onChange={(e) => setForm((p) => ({ ...p, note: e.target.value }))}
@@ -138,7 +138,7 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
                 />
               </label>
               <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Evidence hash (optional)</span>
+                <span className="mb-1 block font-medium text-slate-700">Mã băm minh chứng (tùy chọn)</span>
                 <input
                   value={form.evidenceHash}
                   onChange={(e) => setForm((p) => ({ ...p, evidenceHash: e.target.value }))}
@@ -146,7 +146,7 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
                 />
               </label>
               <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Evidence URI (optional)</span>
+                <span className="mb-1 block font-medium text-slate-700">URI minh chứng (tùy chọn)</span>
                 <input
                   value={form.evidenceUri}
                   onChange={(e) => setForm((p) => ({ ...p, evidenceUri: e.target.value }))}
@@ -159,17 +159,17 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
                 disabled={submitting}
                 className="w-full rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800 disabled:opacity-50"
               >
-                {submitting ? 'Dang ghi...' : 'Luu activity'}
+                {submitting ? 'Đang ghi...' : 'Lưu nhật ký'}
               </button>
             </form>
             {message && <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</p>}
           </section>
 
           <section className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
-            <h2 className="text-base font-semibold text-rose-900">Farm activities ({activities.length})</h2>
+            <h2 className="text-base font-semibold text-rose-900">Nhật ký canh tác ({activities.length})</h2>
             <div className="mt-3 space-y-2">
               {activities.length === 0 && (
-                <p className="text-sm text-slate-500">Chua co activity nao cho batch nay.</p>
+                <p className="text-sm text-slate-500">Chưa có hoạt động nào cho batch này.</p>
               )}
               {activities.map((activity, index) => (
                 <div key={`${activity.activityDate}-${index}`} className="rounded-xl border border-rose-100 p-3">

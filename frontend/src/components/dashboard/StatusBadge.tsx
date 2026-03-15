@@ -11,13 +11,13 @@ const STATUS_STYLES: Record<BatchStatus, string> = {
 };
 
 const STATUS_LABELS: Record<BatchStatus, string> = {
-  CREATED: 'Da tao',
-  IN_PROCESS: 'Dang xu ly',
-  COMPLETED: 'Hoan thanh',
-  TRANSFER_PENDING: 'Cho chuyen giao',
-  TRANSFERRED: 'Da chuyen giao',
+  CREATED: 'Đã tạo',
+  IN_PROCESS: 'Đang xử lý',
+  COMPLETED: 'Hoàn thành',
+  TRANSFER_PENDING: 'Chờ chuyển giao',
+  TRANSFERRED: 'Đã chuyển giao',
   IN_STOCK: 'Trong kho',
-  SOLD: 'Da ban',
+  SOLD: 'Đã bán',
 };
 
 export function StatusBadge({ status }: { status: BatchStatus }) {
