@@ -3,7 +3,9 @@ package com.coffee.trace.controller;
 import com.coffee.trace.dto.request.AddEvidenceRequest;
 import com.coffee.trace.dto.request.CreateRoastBatchRequest;
 import com.coffee.trace.dto.request.TransferRequest;
+import com.coffee.trace.dto.request.UpdateStatusRequest;
 import com.coffee.trace.service.FabricGatewayService;
+import com.coffee.trace.service.PublicCodeService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -18,11 +20,15 @@ import java.util.Map;
 public class RoasterController {
 
     private final FabricGatewayService fabricGateway;
+    private final PublicCodeService    publicCodeService;
     private final ObjectMapper         objectMapper;
 
-    public RoasterController(FabricGatewayService fabricGateway, ObjectMapper objectMapper) {
-        this.fabricGateway = fabricGateway;
-        this.objectMapper  = objectMapper;
+    public RoasterController(FabricGatewayService fabricGateway,
+                             PublicCodeService publicCodeService,
+                             ObjectMapper objectMapper) {
+        this.fabricGateway    = fabricGateway;
+        this.publicCodeService = publicCodeService;
+        this.objectMapper     = objectMapper;
     }
 
     /** POST /api/roast — create a RoastBatch */
@@ -30,14 +36,17 @@ public class RoasterController {
     @PreAuthorize("hasRole('ROASTER')")
     public ResponseEntity<?> createRoast(@AuthenticationPrincipal String userId,
                                          @Valid @RequestBody CreateRoastBatchRequest req) throws Exception {
-        String metadata = objectMapper.writeValueAsString(Map.of(
-                "roastProfile",         req.getRoastProfile(),
-                "roastDate",            req.getRoastDate(),
-                "roastDurationMinutes", req.getRoastDurationMinutes(),
-                "weightKg",             req.getWeightKg()
-        ));
-        byte[] result = fabricGateway.submitAs(userId, "createRoastBatch",
-                req.getParentBatchId(), metadata);
+        String publicCode = publicCodeService.generateForType("ROAST");
+        byte[] result = fabricGateway.submitAs(
+                userId,
+                "createRoastBatch",
+                publicCode,
+                req.getParentBatchId(),
+                req.getRoastProfile(),
+                req.getRoastDate(),
+                req.getRoastDurationMinutes(),
+                req.getWeightKg()
+        );
         return ResponseEntity.ok(objectMapper.readValue(result, Map.class));
     }
 
@@ -60,6 +69,16 @@ public class RoasterController {
     public ResponseEntity<?> requestTransfer(@AuthenticationPrincipal String userId,
                                              @Valid @RequestBody TransferRequest req) throws Exception {
         byte[] result = fabricGateway.submitAs(userId, "requestTransfer", req.getBatchId(), req.getToMSP());
+        return ResponseEntity.ok(objectMapper.readValue(result, Map.class));
+    }
+
+    /** PATCH /api/roast/{id}/status */
+    @PatchMapping("/roast/{id}/status")
+    @PreAuthorize("hasRole('ROASTER')")
+    public ResponseEntity<?> updateStatus(@AuthenticationPrincipal String userId,
+                                          @PathVariable String id,
+                                          @Valid @RequestBody UpdateStatusRequest req) throws Exception {
+        byte[] result = fabricGateway.submitAs(userId, "updateBatchStatus", id, req.getNewStatus());
         return ResponseEntity.ok(objectMapper.readValue(result, Map.class));
     }
 }

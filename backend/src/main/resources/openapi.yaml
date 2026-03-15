@@ -231,6 +231,30 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/roast/{id}/status:
+    patch:
+      tags: [Roaster]
+      summary: Update roast batch status
+      parameters:
+        - $ref: "#/components/parameters/batchId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStatusRequest"
+      responses:
+        "200":
+          description: Updated batch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchView"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
   /api/transfer/request:
     post:
       tags: [Roaster]
@@ -616,7 +640,7 @@ components:
         coffeeVariety:
           type: string
         weightKg:
-          type: number
+          type: string
 
     CreateProcessedBatchRequest:
       type: object
@@ -643,7 +667,7 @@ components:
         facilityName:
           type: string
         weightKg:
-          type: number
+          type: string
 
     CreateRoastBatchRequest:
       type: object
@@ -658,9 +682,9 @@ components:
           type: string
           format: date
         roastDurationMinutes:
-          type: integer
+          type: string
         weightKg:
-          type: number
+          type: string
 
     CreatePackagedBatchRequest:
       type: object
@@ -670,7 +694,7 @@ components:
         parentBatchId:
           type: string
         packageWeight:
-          type: number
+          type: string
         packageDate:
           type: string
           format: date
@@ -678,7 +702,7 @@ components:
           type: string
           format: date
         packageCount:
-          type: integer
+          type: string
 
     RecordFarmActivityRequest:
       type: object
@@ -688,6 +712,16 @@ components:
           type: string
         activityType:
           type: string
+          enum:
+            [
+              IRRIGATION,
+              FERTILIZATION,
+              PEST_CONTROL,
+              PRUNING,
+              SHADE_MANAGEMENT,
+              SOIL_TEST,
+              OTHER,
+            ]
         activityDate:
           type: string
           format: date

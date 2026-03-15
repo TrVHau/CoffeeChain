@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, {
   createContext,
@@ -8,7 +8,6 @@ import React, {
   type ReactNode,
 } from 'react';
 
-// 5 roles khớp với certificate attribute trong Fabric CA (docs/02_roles_and_orgs.md)
 export type UserRole =
   | 'FARMER'
   | 'PROCESSOR'
@@ -16,13 +15,12 @@ export type UserRole =
   | 'PACKAGER'
   | 'RETAILER';
 
-// Mapping role → dashboard path — dùng chung ở login page, dashboard redirect, middleware
 export const ROLE_DASHBOARD: Record<UserRole, string> = {
-  FARMER:    '/dashboard/farmer',
+  FARMER: '/dashboard/farmer',
   PROCESSOR: '/dashboard/processor',
-  ROASTER:   '/dashboard/roaster',
-  PACKAGER:  '/dashboard/packager',
-  RETAILER:  '/dashboard/retailer',
+  ROASTER: '/dashboard/roaster',
+  PACKAGER: '/dashboard/packager',
+  RETAILER: '/dashboard/retailer',
 };
 
 interface AuthUser {
@@ -36,6 +34,7 @@ interface AuthContextType {
   login: (userId: string, token: string, role: UserRole) => void;
   logout: () => void;
   isAuthenticated: boolean;
+  isHydrated: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -44,8 +43,8 @@ const STORAGE_KEY = 'auth_user';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [isHydrated, setIsHydrated] = useState(false);
 
-  // Rehydrate từ localStorage khi app load lại
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
@@ -55,13 +54,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem(STORAGE_KEY);
       }
     }
+    setIsHydrated(true);
   }, []);
 
   const login = (userId: string, token: string, role: UserRole) => {
     const authUser: AuthUser = { userId, token, role };
     setUser(authUser);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(authUser));
-    // Set cookies để Next.js middleware đọc được (middleware không access localStorage)
     document.cookie = `auth_token=${token}; path=/; SameSite=Lax`;
     document.cookie = `user_role=${role}; path=/; SameSite=Lax`;
   };
@@ -74,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user, isHydrated }}>
       {children}
     </AuthContext.Provider>
   );

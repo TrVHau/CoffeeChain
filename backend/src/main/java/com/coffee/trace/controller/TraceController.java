@@ -3,6 +3,8 @@ package com.coffee.trace.controller;
 import com.coffee.trace.dto.response.BatchResponse;
 import com.coffee.trace.dto.response.TraceResponse;
 import com.coffee.trace.entity.BatchEntity;
+import com.coffee.trace.entity.FarmActivityEntity;
+import com.coffee.trace.entity.LedgerRefEntity;
 import com.coffee.trace.repository.BatchRepository;
 import com.coffee.trace.repository.FarmActivityRepository;
 import com.coffee.trace.repository.LedgerRefRepository;
@@ -12,7 +14,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @RestController
 public class TraceController {
@@ -43,18 +48,39 @@ public class TraceController {
             return ResponseEntity.notFound().build();
         }
 
-        // Walk parent chain
-        List<BatchEntity> parentChain = new ArrayList<>();
+        // Walk parent chain from immediate parent -> oldest ancestor
+        List<BatchEntity> parentChainNewestToOldest = new ArrayList<>();
+        Set<String> visited = new HashSet<>();
         String parentId = current.getParentBatchId();
-        while (parentId != null) {
+        while (parentId != null && !parentId.isBlank() && visited.add(parentId)) {
             BatchEntity parent = batchRepository.findById(parentId).orElse(null);
             if (parent == null) break;
-            parentChain.add(parent);
+            parentChainNewestToOldest.add(parent);
             parentId = parent.getParentBatchId();
         }
 
-        var farmActivities = farmActivityRepository.findByHarvestBatchIdOrderByActivityDateAsc(current.getBatchId());
-        var ledgerRefs     = ledgerRefRepository.findByBatchIdOrderByCreatedAtAsc(current.getBatchId());
+        // Response/UI expects oldest -> newest parent order
+        List<BatchEntity> parentChain = new ArrayList<>(parentChainNewestToOldest);
+        Collections.reverse(parentChain);
+
+        String harvestBatchId = "HARVEST".equalsIgnoreCase(current.getType())
+                ? current.getBatchId()
+                : parentChain.stream()
+                .filter(b -> "HARVEST".equalsIgnoreCase(b.getType()))
+                .map(BatchEntity::getBatchId)
+                .findFirst()
+                .orElse(null);
+
+        List<FarmActivityEntity> farmActivities = harvestBatchId != null
+                ? farmActivityRepository.findByHarvestBatchIdOrderByActivityDateAsc(harvestBatchId)
+                : List.of();
+
+        List<String> chainBatchIds = new ArrayList<>();
+        parentChain.forEach(b -> chainBatchIds.add(b.getBatchId()));
+        chainBatchIds.add(current.getBatchId());
+        List<LedgerRefEntity> ledgerRefs = chainBatchIds.isEmpty()
+                ? List.of()
+                : ledgerRefRepository.findByBatchIdInOrderByCreatedAtAsc(chainBatchIds);
 
         TraceResponse response = TraceResponse.builder()
                 .batch(BatchResponse.from(current))

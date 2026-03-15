@@ -1,3 +1,27 @@
-@tailwind base;
+﻿@tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --ptit-50: #fff1f2;
+  --ptit-100: #ffe4e6;
+  --ptit-200: #fecdd3;
+  --ptit-300: #fda4af;
+  --ptit-400: #fb7185;
+  --ptit-500: #f43f5e;
+  --ptit-600: #e11d48;
+  --ptit-700: #be123c;
+  --ptit-800: #9f1239;
+  --ptit-900: #881337;
+}
+
+@layer base {
+  html,
+  body {
+    @apply bg-rose-50 text-slate-900;
+  }
+
+  * {
+    @apply antialiased;
+  }
+}

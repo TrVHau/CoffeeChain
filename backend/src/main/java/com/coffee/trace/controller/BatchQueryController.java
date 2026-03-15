@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -39,14 +40,15 @@ public class BatchQueryController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String ownerMSP) {
 
-        List<BatchEntity> batches;
-        if (type != null && status != null) {
-            batches = batchRepository.findByTypeAndStatus(type, status);
-        } else if (ownerMSP != null) {
-            batches = batchRepository.findByOwnerMsp(ownerMSP);
-        } else {
-            batches = batchRepository.findAll();
-        }
+        List<BatchEntity> batches = batchRepository.findAll().stream()
+                .filter(b -> type == null || type.equalsIgnoreCase(b.getType()))
+                .filter(b -> status == null || status.equalsIgnoreCase(b.getStatus()))
+                .filter(b -> ownerMSP == null || ownerMSP.equalsIgnoreCase(b.getOwnerMsp()))
+                .sorted(Comparator.comparing(
+                        BatchEntity::getUpdatedAt,
+                        Comparator.nullsLast(Comparator.reverseOrder())
+                ))
+                .toList();
 
         return ResponseEntity.ok(batches.stream().map(BatchResponse::from).toList());
     }
@@ -60,7 +62,7 @@ public class BatchQueryController {
     public ResponseEntity<?> getBatch(@PathVariable String id,
                                       @RequestParam(required = false) String source) throws Exception {
         if ("chain".equalsIgnoreCase(source)) {
-            byte[] result = fabricGateway.evaluateTransaction("Org1", "queryBatchById", id);
+            byte[] result = fabricGateway.evaluateTransaction("Org1", "getBatch", id);
             return ResponseEntity.ok(objectMapper.readValue(result, Map.class));
         }
 

@@ -3,6 +3,7 @@ package com.coffee.trace.controller;
 import com.coffee.trace.dto.request.CreatePackagedBatchRequest;
 import com.coffee.trace.repository.BatchRepository;
 import com.coffee.trace.service.FabricGatewayService;
+import com.coffee.trace.service.PublicCodeService;
 import com.coffee.trace.service.QrCodeService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
@@ -20,6 +21,7 @@ import java.util.Map;
 public class PackagerController {
 
     private final FabricGatewayService fabricGateway;
+    private final PublicCodeService    publicCodeService;
     private final ObjectMapper         objectMapper;
     private final QrCodeService        qrCodeService;
     private final BatchRepository      batchRepository;
@@ -28,13 +30,15 @@ public class PackagerController {
     private String publicBaseUrl;
 
     public PackagerController(FabricGatewayService fabricGateway,
+                              PublicCodeService publicCodeService,
                               ObjectMapper objectMapper,
                               QrCodeService qrCodeService,
                               BatchRepository batchRepository) {
-        this.fabricGateway   = fabricGateway;
-        this.objectMapper    = objectMapper;
-        this.qrCodeService   = qrCodeService;
-        this.batchRepository = batchRepository;
+        this.fabricGateway    = fabricGateway;
+        this.publicCodeService = publicCodeService;
+        this.objectMapper     = objectMapper;
+        this.qrCodeService    = qrCodeService;
+        this.batchRepository  = batchRepository;
     }
 
     /**
@@ -54,14 +58,18 @@ public class PackagerController {
     @PreAuthorize("hasRole('PACKAGER')")
     public ResponseEntity<?> createPackaged(@AuthenticationPrincipal String userId,
                                             @Valid @RequestBody CreatePackagedBatchRequest req) throws Exception {
-        String metadata = objectMapper.writeValueAsString(Map.of(
-                "packageWeight", req.getPackageWeight(),
-                "packagedDate",  req.getPackageDate(),   // key = packagedDate per data model
-                "expiryDate",    req.getExpiryDate(),
-                "packageCount",  req.getPackageCount()
-        ));
-        byte[] result = fabricGateway.submitAs(userId, "createPackagedBatch",
-                req.getParentBatchId(), metadata, publicBaseUrl);
+        String publicCode = publicCodeService.generateForType("PACKAGED");
+        byte[] result = fabricGateway.submitAs(
+                userId,
+                "createPackagedBatch",
+                publicCode,
+                req.getParentBatchId(),
+                req.getPackageWeight(),
+                req.getPackageCount(),
+                req.getPackageDate(),
+                req.getExpiryDate(),
+                publicBaseUrl
+        );
         return ResponseEntity.ok(objectMapper.readValue(result, Map.class));
     }
 

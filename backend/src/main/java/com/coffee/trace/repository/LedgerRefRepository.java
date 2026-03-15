@@ -10,6 +10,7 @@ import java.util.Optional;
 public interface LedgerRefRepository extends JpaRepository<LedgerRefEntity, Long> {
 
     List<LedgerRefEntity> findByBatchIdOrderByCreatedAtAsc(String batchId);
+    List<LedgerRefEntity> findByBatchIdInOrderByCreatedAtAsc(List<String> batchIds);
 
     Optional<LedgerRefEntity> findTopByBatchIdAndEventNameOrderByCreatedAtDesc(
             String batchId, String eventName);

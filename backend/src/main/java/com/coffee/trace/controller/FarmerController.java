@@ -4,6 +4,7 @@ import com.coffee.trace.dto.request.CreateHarvestBatchRequest;
 import com.coffee.trace.dto.request.RecordFarmActivityRequest;
 import com.coffee.trace.dto.request.UpdateStatusRequest;
 import com.coffee.trace.service.FabricGatewayService;
+import com.coffee.trace.service.PublicCodeService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -18,11 +19,15 @@ import java.util.Map;
 public class FarmerController {
 
     private final FabricGatewayService fabricGateway;
+    private final PublicCodeService    publicCodeService;
     private final ObjectMapper         objectMapper;
 
-    public FarmerController(FabricGatewayService fabricGateway, ObjectMapper objectMapper) {
-        this.fabricGateway = fabricGateway;
-        this.objectMapper  = objectMapper;
+    public FarmerController(FabricGatewayService fabricGateway,
+                            PublicCodeService publicCodeService,
+                            ObjectMapper objectMapper) {
+        this.fabricGateway    = fabricGateway;
+        this.publicCodeService = publicCodeService;
+        this.objectMapper     = objectMapper;
     }
 
     /** POST /api/harvest — create a new HarvestBatch on ledger */
@@ -30,13 +35,16 @@ public class FarmerController {
     @PreAuthorize("hasRole('FARMER')")
     public ResponseEntity<?> createHarvest(@AuthenticationPrincipal String userId,
                                            @Valid @RequestBody CreateHarvestBatchRequest req) throws Exception {
-        String metadata = objectMapper.writeValueAsString(Map.of(
-                "farmLocation",  req.getFarmLocation(),
-                "harvestDate",   req.getHarvestDate(),
-                "coffeeVariety", req.getCoffeeVariety(),
-                "weightKg",      req.getWeightKg()
-        ));
-        byte[] result = fabricGateway.submitAs(userId, "createHarvestBatch", metadata);
+        String publicCode = publicCodeService.generateForType("HARVEST");
+        byte[] result = fabricGateway.submitAs(
+                userId,
+                "createHarvestBatch",
+                publicCode,
+                req.getFarmLocation(),
+                req.getHarvestDate(),
+                req.getCoffeeVariety(),
+                req.getWeightKg()
+        );
         return ResponseEntity.ok(objectMapper.readValue(result, Map.class));
     }
 

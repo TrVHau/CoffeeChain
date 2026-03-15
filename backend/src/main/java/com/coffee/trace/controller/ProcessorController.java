@@ -3,6 +3,7 @@ package com.coffee.trace.controller;
 import com.coffee.trace.dto.request.CreateProcessedBatchRequest;
 import com.coffee.trace.dto.request.UpdateStatusRequest;
 import com.coffee.trace.service.FabricGatewayService;
+import com.coffee.trace.service.PublicCodeService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -17,11 +18,15 @@ import java.util.Map;
 public class ProcessorController {
 
     private final FabricGatewayService fabricGateway;
+    private final PublicCodeService    publicCodeService;
     private final ObjectMapper         objectMapper;
 
-    public ProcessorController(FabricGatewayService fabricGateway, ObjectMapper objectMapper) {
-        this.fabricGateway = fabricGateway;
-        this.objectMapper  = objectMapper;
+    public ProcessorController(FabricGatewayService fabricGateway,
+                               PublicCodeService publicCodeService,
+                               ObjectMapper objectMapper) {
+        this.fabricGateway    = fabricGateway;
+        this.publicCodeService = publicCodeService;
+        this.objectMapper     = objectMapper;
     }
 
     /** POST /api/processed — create a ProcessedBatch */
@@ -29,15 +34,18 @@ public class ProcessorController {
     @PreAuthorize("hasRole('PROCESSOR')")
     public ResponseEntity<?> createProcessed(@AuthenticationPrincipal String userId,
                                              @Valid @RequestBody CreateProcessedBatchRequest req) throws Exception {
-        String metadata = objectMapper.writeValueAsString(Map.of(
-                "processingMethod", req.getProcessingMethod(),
-                "startDate",        req.getStartDate(),
-                "endDate",          req.getEndDate(),
-                "facilityName",     req.getFacilityName(),
-                "weightKg",         req.getWeightKg()
-        ));
-        byte[] result = fabricGateway.submitAs(userId, "createProcessedBatch",
-                req.getParentBatchId(), metadata);
+        String publicCode = publicCodeService.generateForType("PROCESSED");
+        byte[] result = fabricGateway.submitAs(
+                userId,
+                "createProcessedBatch",
+                publicCode,
+                req.getParentBatchId(),
+                req.getProcessingMethod(),
+                req.getStartDate(),
+                req.getEndDate(),
+                req.getFacilityName(),
+                req.getWeightKg()
+        );
         return ResponseEntity.ok(objectMapper.readValue(result, Map.class));
     }
 
