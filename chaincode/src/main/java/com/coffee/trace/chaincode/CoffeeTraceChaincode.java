@@ -16,34 +16,42 @@ public class CoffeeTraceChaincode implements ContractInterface {
     // EVENT PAYLOAD BUILDERS
     // ══════════════════════════════════════════════════════════
 
+    private Map<String, String> stableEventMap(String... kv) {
+        Map<String, String> out = new TreeMap<>();
+        for (int i = 0; i < kv.length; i += 2) {
+            out.put(kv[i], kv[i + 1]);
+        }
+        return out;
+    }
+
     private byte[] buildBatchPayload(Context ctx, Batch b) {
-        return JSON.serializeMap(Map.of(
-            "batchId",    b.getBatchId(),
-            "type",       b.getType(),
-            "ownerMSP",   b.getOwnerMSP(),
+        return JSON.serializeMap(stableEventMap(
+            "batchId", b.getBatchId(),
+            "type", b.getType(),
+            "ownerMSP", b.getOwnerMSP(),
             "publicCode", b.getPublicCode(),
-            "status",     b.getStatus(),
-            "txId",       ctx.getStub().getTxId()
+            "status", b.getStatus(),
+            "txId", ctx.getStub().getTxId()
         ));
     }
 
     private byte[] buildStatusPayload(Context ctx,
             Batch b, String oldStatus, String newStatus) {
-        return JSON.serializeMap(Map.of(
-            "batchId",   b.getBatchId(),
+        return JSON.serializeMap(stableEventMap(
+            "batchId", b.getBatchId(),
             "oldStatus", oldStatus,
             "newStatus", newStatus,
-            "txId",      ctx.getStub().getTxId()
+            "txId", ctx.getStub().getTxId()
         ));
     }
 
     private byte[] buildTransferPayload(Context ctx,
             Batch b, String toMSP) {
-        return JSON.serializeMap(Map.of(
+        return JSON.serializeMap(stableEventMap(
             "batchId", b.getBatchId(),
             "fromMSP", b.getOwnerMSP(),
-            "toMSP",   toMSP,
-            "txId",    ctx.getStub().getTxId()
+            "toMSP", toMSP,
+            "txId", ctx.getStub().getTxId()
         ));
     }
 
@@ -51,20 +59,20 @@ public class CoffeeTraceChaincode implements ContractInterface {
             Batch b, String fromMSP) {
         // blockNumber KHÔNG lấy được trong chaincode —
         // lấy từ event.getBlockNumber() ở EventIndexerService.
-        return JSON.serializeMap(Map.of(
+        return JSON.serializeMap(stableEventMap(
             "batchId", b.getBatchId(),
             "fromMSP", fromMSP,
-            "toMSP",   b.getOwnerMSP(),
-            "txId",    ctx.getStub().getTxId()
+            "toMSP", b.getOwnerMSP(),
+            "txId", ctx.getStub().getTxId()
         ));
     }
 
     private byte[] buildEvidencePayload(Context ctx, Batch b) {
-        return JSON.serializeMap(Map.of(
+        return JSON.serializeMap(stableEventMap(
             "batchId", b.getBatchId(),
-            "hash",    b.getEvidenceHash(),
-            "uri",     b.getEvidenceUri(),
-            "txId",    ctx.getStub().getTxId()
+            "hash", b.getEvidenceHash(),
+            "uri", b.getEvidenceUri(),
+            "txId", ctx.getStub().getTxId()
         ));
     }
 
@@ -219,17 +227,18 @@ public class CoffeeTraceChaincode implements ContractInterface {
                 + ". Valid: " + validTypes);
         }
 
-        Map<String, String> payload = new HashMap<>();
-        payload.put("eventType",      "FARM_ACTIVITY_RECORDED");
-        payload.put("harvestBatchId", harvestBatchId);
-        payload.put("activityType",   activityType);
-        payload.put("activityDate",   activityDate);
-        payload.put("note",           note         != null ? note         : "");
-        payload.put("evidenceHash",   evidenceHash != null ? evidenceHash : "");
-        payload.put("evidenceUri",    evidenceUri  != null ? evidenceUri  : "");
-        payload.put("recordedBy",     ctx.getClientIdentity().getId());
-        payload.put("recordedAt",     LedgerUtils.now(ctx));
-        payload.put("txId",           ctx.getStub().getTxId());
+        // Use TreeMap for deterministic key ordering across peers
+        Map<String, String> payload = stableEventMap(
+            "activityDate",   activityDate,
+            "activityType",   activityType,
+            "evidenceHash",   evidenceHash != null ? evidenceHash : "",
+            "evidenceUri",    evidenceUri  != null ? evidenceUri  : "",
+            "eventType",      "FARM_ACTIVITY_RECORDED",
+            "harvestBatchId", harvestBatchId,
+            "note",           note         != null ? note         : "",
+            "recordedAt",     LedgerUtils.now(ctx),
+            "recordedBy",     ctx.getClientIdentity().getId(),
+            "txId",           ctx.getStub().getTxId());
 
         ctx.getStub().setEvent("FARM_ACTIVITY_RECORDED",
             JSON.serializeMap(payload));

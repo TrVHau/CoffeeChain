@@ -26,8 +26,8 @@ cd "$NETWORK_DIR"
 
 CHANNEL_NAME="coffee-traceability-channel"
 CHAINCODE_NAME="CoffeeTraceChaincode"
-CHAINCODE_VERSION="1.0"
-CHAINCODE_SEQUENCE=1
+CHAINCODE_VERSION="${CHAINCODE_VERSION:-1.0}"
+CHAINCODE_SEQUENCE="${CHAINCODE_SEQUENCE:-1}"
 
 echo "======================================================"
 echo " CoffeeChain — Chaincode Deployment"
@@ -111,7 +111,8 @@ PACKAGE_ID=$(docker exec \
   -e CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/admin-msp \
   peer0.org1.example.com \
   peer lifecycle chaincode queryinstalled 2>&1 \
-  | grep "Package ID:" \
+  | grep "Package ID:.*${CHAINCODE_NAME}_${CHAINCODE_VERSION}" \
+  | head -1 \
   | sed 's/Package ID: //' \
   | sed 's/, Label.*//' \
   | tr -d '[:space:]')

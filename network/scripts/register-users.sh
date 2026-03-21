@@ -36,11 +36,30 @@ CA_CLIENT_BASE="/tmp/coffee-ca-client"
 
 # ── Helpers ───────────────────────────────────────────────
 
+ca_tls_cert_path() {
+  local org="$1" # Org1 | Org2
+  local base="$CRYPTO_HOME/peerOrganizations/${org,,}.example.com/ca"
+
+  if [[ -f "$base/ca-cert.pem" ]]; then
+    echo "$base/ca-cert.pem"
+    return 0
+  fi
+
+  if [[ -f "$base/ca.${org,,}.example.com-cert.pem" ]]; then
+    echo "$base/ca.${org,,}.example.com-cert.pem"
+    return 0
+  fi
+
+  echo "ERROR: No CA cert found in $base (expected ca-cert.pem or ca.${org,,}.example.com-cert.pem)" >&2
+  return 1
+}
+
 enroll_admin() {
   local org="$1"       # Org1 | Org2
   local ca_host="$2"   # ca.org1.example.com:7054
   local admin_dir="$CA_CLIENT_BASE/$org/admin"
-  local tls_cert="$CRYPTO_HOME/peerOrganizations/${org,,}.example.com/ca/ca-cert.pem"
+  local tls_cert
+  tls_cert="$(ca_tls_cert_path "$org")"
 
   mkdir -p "$admin_dir"
   export FABRIC_CA_CLIENT_HOME="$admin_dir"
@@ -60,7 +79,8 @@ register_and_enroll() {
   local msp_id="${org}MSP"
   local admin_dir="$CA_CLIENT_BASE/$org/admin"
   local user_dir="$CRYPTO_HOME/peerOrganizations/${org,,}.example.com/users/$user_id"
-  local tls_cert="$CRYPTO_HOME/peerOrganizations/${org,,}.example.com/ca/ca-cert.pem"
+  local tls_cert
+  tls_cert="$(ca_tls_cert_path "$org")"
 
   export FABRIC_CA_CLIENT_HOME="$admin_dir"
 
@@ -75,6 +95,7 @@ register_and_enroll() {
     2>&1 | grep -v "already registered" || true
 
   # Enroll
+  rm -rf "$user_dir/msp"
   mkdir -p "$user_dir/msp/signcerts" "$user_dir/msp/keystore"
   export FABRIC_CA_CLIENT_HOME="$user_dir"
 

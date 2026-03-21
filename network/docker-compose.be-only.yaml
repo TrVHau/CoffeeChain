@@ -23,11 +23,13 @@ version: '3.8'
 
 networks:
   default:
-    name: coffee_network_be
+    name: coffee_network  # Use same network as main docker-compose.yaml
 
 volumes:
   postgres-data:
   ipfs-data:
+  # Crypto config is optional for be-only mode, but needed for Fabric endpoints
+  # crypto-data:
 
 services:
 
@@ -81,14 +83,14 @@ services:
       - FABRIC_ORG2_PEER_ENDPOINT=peer0.org2.example.com:9051
       - FABRIC_ORG1_MSP_ID=Org1MSP
       - FABRIC_ORG2_MSP_ID=Org2MSP
-      - FABRIC_ORG1_TLS_CERT_PATH=/crypto/org1/tls-ca.pem
-      - FABRIC_ORG2_TLS_CERT_PATH=/crypto/org2/tls-ca.pem
-      - FABRIC_ORG1_ADMIN_CERT_PATH=/crypto/org1/admin-cert.pem
-      - FABRIC_ORG1_ADMIN_KEY_PATH=/crypto/org1/admin-key/
-      - FABRIC_ORG2_ADMIN_CERT_PATH=/crypto/org2/admin-cert.pem
-      - FABRIC_ORG2_ADMIN_KEY_PATH=/crypto/org2/admin-key/
-      - FABRIC_ORG1_USERS_BASE_PATH=/crypto/org1/users
-      - FABRIC_ORG2_USERS_BASE_PATH=/crypto/org2/users
+      - FABRIC_ORG1_TLS_CERT_PATH=/crypto/peerOrganizations/org1.example.com/tlsca/tlsca.org1.example.com-cert.pem
+      - FABRIC_ORG2_TLS_CERT_PATH=/crypto/peerOrganizations/org2.example.com/tlsca/tlsca.org2.example.com-cert.pem
+      - FABRIC_ORG1_ADMIN_CERT_PATH=/crypto/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/signcerts/Admin@org1.example.com-cert.pem
+      - FABRIC_ORG1_ADMIN_KEY_PATH=/crypto/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/keystore/
+      - FABRIC_ORG2_ADMIN_CERT_PATH=/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp/signcerts/Admin@org2.example.com-cert.pem
+      - FABRIC_ORG2_ADMIN_KEY_PATH=/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp/keystore/
+      - FABRIC_ORG1_USERS_BASE_PATH=/crypto/peerOrganizations/org1.example.com/users
+      - FABRIC_ORG2_USERS_BASE_PATH=/crypto/peerOrganizations/org2.example.com/users
 
       # IPFS
       - IPFS_API_URL=http://ipfs:5001
@@ -98,6 +100,8 @@ services:
 
       # JWT secret (keep this value or override with your own 32+ char secret)
       - JWT_SECRET=coffee-chain-demo-secret-key-at-least-32-chars!!
+    volumes:
+      - ${CRYPTO_BASE:-/tmp/coffeechain-crypto}:/crypto
     ports:
       - "8080:8080"
     depends_on:
