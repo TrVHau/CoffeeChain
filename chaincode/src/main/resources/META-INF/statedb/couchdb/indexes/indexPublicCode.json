@@ -1,0 +1,6 @@
+{
+  "index": { "fields": ["docType", "publicCode"] },
+  "ddoc": "indexPublicCodeDoc",
+  "name": "indexPublicCode",
+  "type": "json"
+}
