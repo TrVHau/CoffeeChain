@@ -1,402 +1,489 @@
-# Deployment
+# CoffeeChain — Hướng Dẫn Deploy Chi Tiết
 
-## 1. Docker Compose (Demo)
+> **Môi trường đã kiểm tra**: Ubuntu 22.04 LTS / Linux, Docker Engine 24+  
+> **Project path**: `/media/sagito/SHARED/WINDOW/BTL/ATBM/CoffeeChain`  
+> **Lưu ý NTFS**: Project nằm trên ổ Windows NTFS — dùng `bash scripts/...` thay vì `./scripts/...`
 
-```yaml
-# network/docker-compose.yaml
-version: '3.8'
+---
 
-services:
+## MỤC LỤC
 
-  orderer.example.com:
-    image: hyperledger/fabric-orderer:2.5
-    environment:
-      - FABRIC_LOGGING_SPEC=INFO
-      - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
-      - ORDERER_GENERAL_LISTENPORT=7050
-      - ORDERER_GENERAL_LOCALMSPID=OrdererMSP
-      - ORDERER_GENERAL_LOCALMSPDIR=/var/hyperledger/orderer/msp
-      - ORDERER_GENERAL_TLS_ENABLED=true
-      - ORDERER_GENERAL_TLS_PRIVATEKEY=/var/hyperledger/orderer/tls/server.key
-      - ORDERER_GENERAL_TLS_CERTIFICATE=/var/hyperledger/orderer/tls/server.crt
-      - ORDERER_GENERAL_TLS_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
-      - ORDERER_GENERAL_BOOTSTRAPMETHOD=file
-      - ORDERER_GENERAL_BOOTSTRAPFILE=/var/hyperledger/orderer/genesis.block
-      - ORDERER_GENERAL_CONSENSUS_TYPE=etcdraft
-    volumes:
-      - ./channel-artifacts/genesis.block:/var/hyperledger/orderer/genesis.block
-      - ./crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/msp:/var/hyperledger/orderer/msp
-      - ./crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/tls:/var/hyperledger/orderer/tls
-    ports:
-      - "7050:7050"
+1. [Yêu cầu cài đặt](#1-yêu-cầu-cài-đặt)
+2. [Chế độ A — Backend-only (không cần Fabric)](#2-chế-độ-a--backend-only-không-cần-fabric)
+3. [Chế độ B — Full Fabric Stack (đầy đủ)](#3-chế-độ-b--full-fabric-stack-đầy-đủ)
+4. [Khởi động lại sau reboot](#4-khởi-động-lại-sau-reboot)
+5. [Dừng và reset](#5-dừng-và-reset)
+6. [Kiểm tra sức khoẻ hệ thống](#6-kiểm-tra-sức-khoẻ-hệ-thống)
+7. [Cổng và dịch vụ](#7-cổng-và-dịch-vụ)
+8. [Biến môi trường quan trọng](#8-biến-môi-trường-quan-trọng)
+9. [Xử lý lỗi deploy](#9-xử-lý-lỗi-deploy)
 
-  peer0.org1.example.com:
-    image: hyperledger/fabric-peer:2.5
-    environment:
-      - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
-      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=coffee_network
-      - FABRIC_LOGGING_SPEC=INFO
-      - CORE_PEER_ID=peer0.org1.example.com
-      - CORE_PEER_ADDRESS=peer0.org1.example.com:7051
-      - CORE_PEER_LISTENADDRESS=0.0.0.0:7051
-      - CORE_PEER_GOSSIP_BOOTSTRAP=peer0.org1.example.com:7051
-      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.org1.example.com:7051
-      - CORE_PEER_LOCALMSPID=Org1MSP
-      - CORE_PEER_TLS_ENABLED=true
-      - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
-      - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/fabric/tls/server.key
-      - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt
-      - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
-      - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb0:5984
-    volumes:
-      - /var/run/docker.sock:/host/var/run/docker.sock
-      - ./crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/msp:/etc/hyperledger/fabric/msp
-      - ./crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls:/etc/hyperledger/fabric/tls
-    ports:
-      - "7051:7051"
-    depends_on:
-      - couchdb0
-      - orderer.example.com
+---
 
-  peer0.org2.example.com:
-    image: hyperledger/fabric-peer:2.5
-    environment:
-      - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
-      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=coffee_network
-      - FABRIC_LOGGING_SPEC=INFO
-      - CORE_PEER_ID=peer0.org2.example.com
-      - CORE_PEER_ADDRESS=peer0.org2.example.com:9051
-      - CORE_PEER_LISTENADDRESS=0.0.0.0:9051
-      - CORE_PEER_GOSSIP_BOOTSTRAP=peer0.org2.example.com:9051
-      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.org2.example.com:9051
-      - CORE_PEER_LOCALMSPID=Org2MSP
-      - CORE_PEER_TLS_ENABLED=true
-      - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
-      - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/fabric/tls/server.key
-      - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt
-      - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
-      - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb1:5984
-    volumes:
-      - /var/run/docker.sock:/host/var/run/docker.sock
-      - ./crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/msp:/etc/hyperledger/fabric/msp
-      - ./crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls:/etc/hyperledger/fabric/tls
-    ports:
-      - "9051:9051"
-    depends_on:
-      - couchdb1
-      - orderer.example.com
+## 1. Yêu cầu cài đặt
 
-  couchdb0:
-    image: couchdb:3.3
-    environment:
-      - COUCHDB_USER=admin
-      - COUCHDB_PASSWORD=adminpw
-    ports:
-      - "5984:5984"
+### 1.1 Phần mềm bắt buộc
 
-  couchdb1:
-    image: couchdb:3.3
-    environment:
-      - COUCHDB_USER=admin
-      - COUCHDB_PASSWORD=adminpw
-    ports:
-      - "7984:5984"
+| Phần mềm | Version tối thiểu | Lệnh kiểm tra |
+|---|---|---|
+| **Docker Engine** | 24.x | `docker --version` |
+| **Docker Compose** | v2.x (plugin) | `docker compose version` |
+| **Java 21** | OpenJDK 21+ | `java -version` |
+| **Gradle wrapper** | 8.x | `cd chaincode && bash gradlew --version` |
+| **fabric-ca-client** | 1.5.x | `fabric-ca-client version` |
 
-  ca.org1.example.com:
-    image: hyperledger/fabric-ca:1.5
-    environment:
-      - FABRIC_CA_HOME=/etc/hyperledger/fabric-ca-server
-      - FABRIC_CA_SERVER_CA_NAME=ca-org1
-      - FABRIC_CA_SERVER_TLS_ENABLED=true
-      - FABRIC_CA_SERVER_PORT=7054
-    volumes:
-      - ./crypto-config/peerOrganizations/org1.example.com/ca:/etc/hyperledger/fabric-ca-server
-    ports:
-      - "7054:7054"
+### 1.2 Phần mềm chỉ cần cho Chế độ B (Full Fabric)
 
-  ca.org2.example.com:
-    image: hyperledger/fabric-ca:1.5
-    environment:
-      - FABRIC_CA_HOME=/etc/hyperledger/fabric-ca-server
-      - FABRIC_CA_SERVER_CA_NAME=ca-org2
-      - FABRIC_CA_SERVER_TLS_ENABLED=true
-      - FABRIC_CA_SERVER_PORT=7054
-    volumes:
-      - ./crypto-config/peerOrganizations/org2.example.com/ca:/etc/hyperledger/fabric-ca-server
-    ports:
-      - "8054:7054"
+| Phần mềm | Lệnh kiểm tra |
+|---|---|
+| `cryptogen` | `cryptogen version` |
+| `configtxgen` | `configtxgen --version` |
+| `peer` (CLI binary) | `peer version` |
 
-  backend:
-    build:
-      context: ../backend
-      dockerfile: Dockerfile
-    environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/coffeetrace
-      - SPRING_DATASOURCE_USERNAME=coffeetrace
-      - SPRING_DATASOURCE_PASSWORD=secret
-      - FABRIC_CHANNEL_NAME=coffee-traceability-channel
-      - FABRIC_CHAINCODE_NAME=CoffeeTraceChaincode
-      - FABRIC_ORG1_PEER_ENDPOINT=peer0.org1.example.com:7051
-      - FABRIC_ORG2_PEER_ENDPOINT=peer0.org2.example.com:9051
-    volumes:
-      - ./crypto-config:/crypto
-    ports:
-      - "8080:8080"
-    depends_on:
-      - peer0.org1.example.com
-      - peer0.org2.example.com
-      - postgres
+### 1.3 Cài Docker Engine trên Ubuntu
 
-  postgres:
-    image: postgres:15
-    environment:
-      - POSTGRES_DB=coffeetrace
-      - POSTGRES_USER=coffeetrace
-      - POSTGRES_PASSWORD=secret
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-      - ../backend/src/main/resources/schema.sql:/docker-entrypoint-initdb.d/schema.sql
-    ports:
-      - "5432:5432"
+```bash
+sudo apt remove -y docker docker-engine docker.io containerd runc 2>/dev/null || true
+sudo apt update && sudo apt install -y ca-certificates curl gnupg lsb-release
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-  frontend:
-    build:
-      context: ../frontend
-      dockerfile: Dockerfile
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8080
-    ports:
-      - "3000:3000"
-    depends_on:
-      - backend
+# Chạy Docker không cần sudo (logout/login lại sau lệnh này)
+sudo usermod -aG docker $USER
+newgrp docker
+```
 
-  ipfs:
-    image: ipfs/kubo:latest
-    volumes:
-      - ipfs-data:/data/ipfs
-    ports:
-      - "5001:5001"   # API
-      - "8081:8080"   # Gateway
+### 1.4 Cài Fabric binaries (chỉ cần Chế độ B)
 
-networks:
-  default:
-    name: coffee_network
+```bash
+cd /media/sagito/SHARED/WINDOW/BTL/ATBM/CoffeeChain/network
 
-volumes:
-  postgres-data:
-  ipfs-data:
+# Tải binaries vào bin/ (-d: chỉ binaries, -s: bỏ qua docker images)
+curl -sSL https://bit.ly/2ysbOFE | bash -s -- 2.5.0 1.5.5 -d -s
+
+# Thêm vào PATH (cần chạy lại mỗi lần mở terminal mới)
+export PATH="$PWD/bin:$PATH"
+
+# Kiểm tra
+cryptogen version && configtxgen --version && peer version
+```
+
+### 1.5 Cài fabric-ca-client (chỉ cần Chế độ B)
+
+```bash
+CA_VERSION="1.5.7"
+curl -sSL "https://github.com/hyperledger/fabric-ca/releases/download/v${CA_VERSION}/hyperledger-fabric-ca-linux-amd64-${CA_VERSION}.tar.gz" \
+  -o /tmp/fabric-ca.tar.gz
+tar -xzf /tmp/fabric-ca.tar.gz -C /tmp/
+sudo mv /tmp/bin/fabric-ca-client /usr/local/bin/
+fabric-ca-client version
+```
+
+### 1.6 Thêm hostnames vào /etc/hosts (bắt buộc — làm 1 lần duy nhất)
+
+```bash
+echo "127.0.0.1 ca.org1.example.com ca.org2.example.com peer0.org1.example.com peer0.org2.example.com orderer.example.com" \
+  | sudo tee -a /etc/hosts
+
+# Kiểm tra
+ping -c1 ca.org1.example.com
+```
+
+> **Lý do**: `fabric-ca-client` kết nối CA qua hostname. Docker CA container sinh TLS cert có SAN `ca.org1.example.com` — DNS phải resolve được hostname đó.
+
+---
+
+## 2. Chế độ A — Backend-only (không cần Fabric)
+
+> Dùng để test auth, query read-model, trace API, Swagger UI.  
+> Fabric-dependent endpoints (POST /api/harvest, /api/process...) trả `HTTP 500` — bình thường.
+
+### 2.1 Build và khởi động
+
+```bash
+cd /media/sagito/SHARED/WINDOW/BTL/ATBM/CoffeeChain/network
+
+# Lần đầu — build image + khởi động (mất 3-5 phút, Maven download deps)
+docker compose -f docker-compose.be-only.yaml up --build -d
+
+# Từ lần 2 trở đi
+docker compose -f docker-compose.be-only.yaml up -d
+```
+
+### 2.2 Xác nhận backend sẵn sàng
+
+```bash
+# Đợi 30-60 giây rồi kiểm tra
+docker logs backend 2>&1 | grep "Started CoffeeTraceApplication"
+
+curl -s http://localhost:8080/actuator/health | python3 -m json.tool
+```
+
+Kết quả mong đợi: `{"status": "UP"}`
+
+Swagger UI: **http://localhost:8080/swagger-ui.html**
+
+### 2.3 Trạng thái containers mong đợi
+
+```bash
+docker compose -f docker-compose.be-only.yaml ps
+```
+
+| Container | Port | Trạng thái |
+|---|---|---|
+| `postgres` | 5432 | `Up (healthy)` |
+| `ipfs` | 5001, 8081 | `Up` |
+| `backend` | 8080 | `Up` |
+
+---
+
+## 3. Chế độ B — Full Fabric Stack (đầy đủ)
+
+> Dùng khi test toàn bộ flow: harvest → process → roast → transfer → package → retail.
+
+### Tổng quan 4 bước
+
+```
+B1. bash scripts/setup-network.sh    — Fabric network (orderer, peers, CAs, channel)
+B2. bash scripts/deploy-chaincode.sh — Deploy chaincode lên channel
+B3. bash scripts/register-users.sh   — Đăng ký 5 user demo trên Fabric CA
+B4. docker compose up -d             — Khởi động backend + postgres + ipfs
 ```
 
 ---
 
-## 2. setup-network.sh
+### Bước B1 — Thiết lập Fabric network
 
 ```bash
-#!/bin/bash
-set -e
+cd /media/sagito/SHARED/WINDOW/BTL/ATBM/CoffeeChain/network
+export PATH="$PWD/bin:$PATH"
 
-CHANNEL_NAME="coffee-traceability-channel"
-CHAINCODE_NAME="CoffeeTraceChaincode"
-CHAINCODE_PATH="../chaincode"
-CHAINCODE_VERSION="1.0"
+bash scripts/setup-network.sh
+```
 
-echo "==> Generating crypto material..."
-cryptogen generate --config=./crypto-config.yaml --output=./crypto-config
+**Những gì script làm:**
 
-echo "==> Generating genesis block and channel tx..."
-configtxgen -profile TwoOrgsOrdererGenesis \
-  -channelID system-channel \
-  -outputBlock ./channel-artifacts/genesis.block
+1. Xoá `network/crypto-config/` và `network/channel-artifacts/` cũ
+2. `cryptogen generate` → sinh crypto material vào `network/crypto-config/`
+3. Copy sang `/tmp/coffeechain-crypto/` (fix NTFS bind mount)
+4. `configtxgen` sinh genesis block + channel.tx + anchor peer tx
+5. Copy artifacts sang `/tmp/coffeechain-artifacts/`
+6. Copy orderer TLS CA cert → `/tmp/coffeechain-artifacts/orderer-tls-ca.crt`
+7. Ghi `network/.env`:
+   ```
+   CRYPTO_BASE=/tmp/coffeechain-crypto
+   ARTIFACTS_BASE=/tmp/coffeechain-artifacts
+   ```
+8. `docker compose up -d` orderer + peers + CouchDBs + CAs
+9. Đợi 15 giây cho containers init
+10. `peer channel create` tạo channel `coffee-traceability-channel`
+11. `peer channel join` cho Org1 peer
+12. `peer channel fetch + join` cho Org2 peer
+13. `peer channel update` anchor peers cho cả 2 org
 
-configtxgen -profile TwoOrgsChannel \
-  -outputCreateChannelTx ./channel-artifacts/channel.tx \
-  -channelID $CHANNEL_NAME
+**Kiểm tra:**
+```bash
+docker exec peer0.org1.example.com peer channel list
+# → coffee-traceability-channel
 
-configtxgen -profile TwoOrgsChannel \
-  -outputAnchorPeersUpdate ./channel-artifacts/Org1MSPanchors.tx \
-  -channelID $CHANNEL_NAME \
-  -asOrg Org1MSP
-
-configtxgen -profile TwoOrgsChannel \
-  -outputAnchorPeersUpdate ./channel-artifacts/Org2MSPanchors.tx \
-  -channelID $CHANNEL_NAME \
-  -asOrg Org2MSP
-
-echo "==> Starting Docker Compose..."
-docker compose up -d
-
-sleep 10  # Chờ các container khởi động
-
-echo "==> Creating channel..."
-docker exec peer0.org1.example.com peer channel create \
-  -o orderer.example.com:7050 \
-  -c $CHANNEL_NAME \
-  -f /channel-artifacts/channel.tx \
-  --tls --cafile /etc/hyperledger/fabric/tls/ca.crt
-
-echo "==> Joining Org1 peer to channel..."
-docker exec peer0.org1.example.com peer channel join \
-  -b /channel-artifacts/${CHANNEL_NAME}.block
-
-echo "==> Joining Org2 peer to channel..."
-docker exec peer0.org2.example.com peer channel join \
-  -b /channel-artifacts/${CHANNEL_NAME}.block
-
-echo "==> Updating anchor peers..."
-docker exec peer0.org1.example.com peer channel update \
-  -o orderer.example.com:7050 \
-  -c $CHANNEL_NAME \
-  -f /channel-artifacts/Org1MSPanchors.tx \
-  --tls --cafile /etc/hyperledger/fabric/tls/ca.crt
-
-docker exec peer0.org2.example.com peer channel update \
-  -o orderer.example.com:7050 \
-  -c $CHANNEL_NAME \
-  -f /channel-artifacts/Org2MSPanchors.tx \
-  --tls --cafile /etc/hyperledger/fabric/tls/ca.crt
-
-echo "==> Network setup complete!"
+docker ps --format "table {{.Names}}\t{{.Status}}"
+# → 7 containers đều Up
 ```
 
 ---
 
-## 3. deploy-chaincode.sh
+### Bước B2 — Deploy chaincode
 
 ```bash
-#!/bin/bash
-set -e
+cd /media/sagito/SHARED/WINDOW/BTL/ATBM/CoffeeChain/network
+export PATH="$PWD/bin:$PATH"
 
-CHANNEL_NAME="coffee-traceability-channel"
-CHAINCODE_NAME="CoffeeTraceChaincode"
-CHAINCODE_VERSION="1.0"
-CHAINCODE_SEQUENCE=1
+bash scripts/deploy-chaincode.sh
+```
 
-echo "==> Building chaincode..."
-cd ../chaincode && ./gradlew shadowJar && cd ../network
+**Những gì script làm:**
 
-echo "==> Packaging chaincode..."
-peer lifecycle chaincode package ${CHAINCODE_NAME}.tar.gz \
-  --path ../chaincode/build/libs/chaincode.jar \
-  --lang java \
-  --label ${CHAINCODE_NAME}_${CHAINCODE_VERSION}
+1. `bash gradlew shadowJar` trong `chaincode/` → `build/libs/chaincode.jar`
+2. `peer lifecycle chaincode package` → `CoffeeTraceChaincode.tar.gz`
+3. `docker pull hyperledger/fabric-javaenv:2.5` (base image peer dùng để build Java cc)
+4. `docker cp` + `peer lifecycle chaincode install` lên peer0.org1
+5. `docker cp` + `peer lifecycle chaincode install` lên peer0.org2
+6. Lấy `PACKAGE_ID` từ `queryinstalled`
+7. `peer lifecycle chaincode approveformyorg` từ Org1
+8. `peer lifecycle chaincode approveformyorg` từ Org2
+9. `peer lifecycle chaincode commit` với endorsement cả 2 org
 
-echo "==> Installing on Org1 peer..."
-docker cp ${CHAINCODE_NAME}.tar.gz peer0.org1.example.com:/tmp/
-docker exec -e CORE_PEER_LOCALMSPID=Org1MSP peer0.org1.example.com \
-  peer lifecycle chaincode install /tmp/${CHAINCODE_NAME}.tar.gz
+**Kiểm tra:**
+```bash
+docker exec peer0.org1.example.com peer lifecycle chaincode querycommitted \
+  --channelID coffee-traceability-channel
+# → Name: CoffeeTraceChaincode, Version: 1.0, Sequence: 1
+```
 
-echo "==> Installing on Org2 peer..."
-docker cp ${CHAINCODE_NAME}.tar.gz peer0.org2.example.com:/tmp/
-docker exec -e CORE_PEER_LOCALMSPID=Org2MSP peer0.org2.example.com \
-  peer lifecycle chaincode install /tmp/${CHAINCODE_NAME}.tar.gz
+---
 
-# Lấy package ID
-PACKAGE_ID=$(docker exec peer0.org1.example.com \
-  peer lifecycle chaincode queryinstalled 2>&1 \
-  | grep "Package ID" | sed 's/Package ID: //' | sed 's/, Label.*//')
+### Bước B3 — Đăng ký user demo
 
-echo "Package ID: $PACKAGE_ID"
+```bash
+cd /media/sagito/SHARED/WINDOW/BTL/ATBM/CoffeeChain/network
 
-echo "==> Approving for Org1..."
-docker exec -e CORE_PEER_LOCALMSPID=Org1MSP peer0.org1.example.com \
-  peer lifecycle chaincode approveformyorg \
-  -o orderer.example.com:7050 \
-  --channelID $CHANNEL_NAME \
-  --name $CHAINCODE_NAME \
-  --version $CHAINCODE_VERSION \
-  --package-id $PACKAGE_ID \
-  --sequence $CHAINCODE_SEQUENCE \
-  --tls --cafile /etc/hyperledger/fabric/tls/ca.crt
+bash scripts/register-users.sh
+```
 
-echo "==> Approving for Org2..."
-docker exec -e CORE_PEER_LOCALMSPID=Org2MSP peer0.org2.example.com \
-  peer lifecycle chaincode approveformyorg \
-  -o orderer.example.com:7050 \
-  --channelID $CHANNEL_NAME \
-  --name $CHAINCODE_NAME \
-  --version $CHAINCODE_VERSION \
-  --package-id $PACKAGE_ID \
-  --sequence $CHAINCODE_SEQUENCE \
-  --tls --cafile /etc/hyperledger/fabric/tls/ca.crt
+Script kết nối Fabric CA, registering + enrolling 5 user:
 
-echo "==> Committing chaincode..."
+| User | Password | Role | Org |
+|---|---|---|---|
+| `farmer_alice` | `farmer_alicepw` | FARMER | Org1MSP |
+| `processor_bob` | `processor_bobpw` | PROCESSOR | Org1MSP |
+| `roaster_charlie` | `roaster_charliepw` | ROASTER | Org1MSP |
+| `packager_dave` | `packager_davepw` | PACKAGER | Org2MSP |
+| `retailer_eve` | `retailer_evepw` | RETAILER | Org2MSP |
+
+> **Lưu ý**: Password CA (`farmer_alicepw`) khác với password login API (`pw123`). API password được seed bởi Flyway, Fabric CA password chỉ dùng khi enroll.
+
+**Kiểm tra:**
+```bash
+ls /tmp/coffeechain-crypto/peerOrganizations/org1.example.com/users/ | grep -v "Admin\|User"
+# → farmer_alice  processor_bob  roaster_charlie
+
+ls /tmp/coffeechain-crypto/peerOrganizations/org1.example.com/users/farmer_alice/msp/signcerts/
+# → cert.pem
+```
+
+---
+
+### Bước B4 — Khởi động backend + infra
+
+```bash
+cd /media/sagito/SHARED/WINDOW/BTL/ATBM/CoffeeChain/network
+
+docker compose up -d postgres ipfs backend
+```
+
+**Đợi backend init (30-60 giây):**
+```bash
+docker logs -f backend 2>&1 | grep -m1 "Started CoffeeTraceApplication"
+```
+
+**Kiểm tra toàn bộ:**
+```bash
+# Health check
+curl -s http://localhost:8080/actuator/health | python3 -m json.tool
+
+# Login thử với farmer_alice
+curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"farmer_alice","password":"pw123"}' | python3 -m json.tool
+```
+
+Nếu login thành công trả về token → backend đã kết nối Fabric identity thành công.
+
+---
+
+## 4. Khởi động lại sau reboot
+
+> `/tmp/` bị xoá sau reboot. Phải khởi tạo lại crypto materials.
+
+### Chế độ A
+
+```bash
+cd /media/sagito/SHARED/WINDOW/BTL/ATBM/CoffeeChain/network
+docker compose -f docker-compose.be-only.yaml up -d
+```
+
+### Chế độ B (toàn bộ)
+
+```bash
+cd /media/sagito/SHARED/WINDOW/BTL/ATBM/CoffeeChain/network
+export PATH="$PWD/bin:$PATH"
+
+docker compose down
+sudo rm -rf /tmp/coffeechain-crypto /tmp/coffeechain-artifacts
+
+bash scripts/setup-network.sh
+bash scripts/deploy-chaincode.sh
+bash scripts/register-users.sh
+docker compose up -d postgres ipfs backend
+```
+
+---
+
+## 5. Dừng và reset
+
+```bash
+cd /media/sagito/SHARED/WINDOW/BTL/ATBM/CoffeeChain/network
+
+# Dừng giữ data
+docker compose stop                                       # Chế độ B
+docker compose -f docker-compose.be-only.yaml stop       # Chế độ A
+
+# Khởi động lại
+docker compose start
+docker compose -f docker-compose.be-only.yaml start
+
+# Reset hoàn toàn (xoá DB + Fabric data)
+docker compose down -v
+sudo rm -rf /tmp/coffeechain-crypto /tmp/coffeechain-artifacts
+rm -f CoffeeTraceChaincode.tar.gz
+```
+
+---
+
+## 6. Kiểm tra sức khoẻ hệ thống
+
+```bash
+# Backend
+curl -s http://localhost:8080/actuator/health | python3 -m json.tool
+
+# PostgreSQL
+docker exec postgres pg_isready -U coffeetrace
+
+# CouchDB Org1 (State DB)
+curl -s http://admin:adminpw@localhost:5984/_up
+
+# IPFS
+curl -s -X POST http://localhost:5001/api/v0/id | python3 -m json.tool | grep "ID"
+
+# Chaincode committed trên channel
 docker exec peer0.org1.example.com \
-  peer lifecycle chaincode commit \
-  -o orderer.example.com:7050 \
-  --channelID $CHANNEL_NAME \
-  --name $CHAINCODE_NAME \
-  --version $CHAINCODE_VERSION \
-  --sequence $CHAINCODE_SEQUENCE \
-  --peerAddresses peer0.org1.example.com:7051 \
-  --peerAddresses peer0.org2.example.com:9051 \
-  --tls --cafile /etc/hyperledger/fabric/tls/ca.crt
+  peer lifecycle chaincode querycommitted --channelID coffee-traceability-channel
 
-echo "==> Chaincode deployed successfully!"
+# Log realtime
+docker logs -f backend
+docker logs -f peer0.org1.example.com
+docker logs -f peer0.org2.example.com
 ```
 
 ---
 
-## 4. register-users.sh
+## 7. Cổng và dịch vụ
+
+| Service | Container | Host Port | URL |
+|---|---|---|---|
+| Backend REST API | `backend` | **8080** | `http://localhost:8080` |
+| Swagger UI | `backend` | **8080** | `http://localhost:8080/swagger-ui.html` |
+| API Docs (JSON) | `backend` | **8080** | `http://localhost:8080/api-docs` |
+| PostgreSQL | `postgres` | 5432 | — |
+| IPFS API | `ipfs` | 5001 | — |
+| IPFS Gateway | `ipfs` | 8081 | `http://localhost:8081/ipfs/<CID>` |
+| Orderer | `orderer.example.com` | 7050 | gRPC |
+| Peer Org1 | `peer0.org1.example.com` | 7051 | gRPC |
+| Peer Org2 | `peer0.org2.example.com` | 9051 | gRPC |
+| CA Org1 | `ca.org1.example.com` | 7054 | HTTPS |
+| CA Org2 | `ca.org2.example.com` | 8054 | HTTPS |
+| CouchDB Org1 | `couchdb0` | 5984 | `http://localhost:5984/_utils` |
+| CouchDB Org2 | `couchdb1` | 7984 | `http://localhost:7984/_utils` |
+
+---
+
+## 8. Biến môi trường quan trọng
+
+### `network/.env` (tự sinh bởi `setup-network.sh`)
+
+```env
+CRYPTO_BASE=/tmp/coffeechain-crypto
+ARTIFACTS_BASE=/tmp/coffeechain-artifacts
+```
+
+`docker-compose.yaml` dùng `${CRYPTO_BASE:-./crypto-config}` — nếu file `.env` không tồn tại, fallback về `./crypto-config`.
+
+### Backend environment (trong `docker-compose.yaml`)
+
+| Biến | Giá trị mặc định |
+|---|---|
+| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://postgres:5432/coffeetrace` |
+| `SPRING_DATASOURCE_USERNAME` | `coffeetrace` |
+| `DB_PASSWORD` | `secret` |
+| `FABRIC_CHANNEL_NAME` | `coffee-traceability-channel` |
+| `FABRIC_CHAINCODE_NAME` | `CoffeeTraceChaincode` |
+| `FABRIC_ORG1_PEER_ENDPOINT` | `peer0.org1.example.com:7051` |
+| `FABRIC_ORG2_PEER_ENDPOINT` | `peer0.org2.example.com:9051` |
+
+---
+
+## 9. Xử lý lỗi deploy
+
+### `no such host` khi chạy register-users.sh
+
+```
+dial tcp: lookup ca.org1.example.com ... no such host
+```
+
+Fix: Xem mục 1.6 — thêm hostnames vào `/etc/hosts`.
+
+---
+
+### TLS verify failed: `certificate is valid for <container-id>, not ca.org1.example.com`
+
+Fabric CA tự sinh TLS cert với container ID làm hostname. Cần thêm SAN `ca.org1.example.com` rồi regenerate:
 
 ```bash
-#!/bin/bash
-set -e
+# 1. Thêm hostname vào CSR config
+CONT_ID=$(grep -A3 "hosts:" /tmp/coffeechain-crypto/peerOrganizations/org1.example.com/ca/fabric-ca-server-config.yaml \
+  | grep -v "hosts:\|localhost" | tr -d ' -')
+sudo sed -i "s/     - $CONT_ID/     - ca.org1.example.com\n     - $CONT_ID/" \
+  /tmp/coffeechain-crypto/peerOrganizations/org1.example.com/ca/fabric-ca-server-config.yaml
 
-# ── Org1 Users ────────────────────────────────────────────────
+CONT_ID2=$(grep -A3 "hosts:" /tmp/coffeechain-crypto/peerOrganizations/org2.example.com/ca/fabric-ca-server-config.yaml \
+  | grep -v "hosts:\|localhost" | tr -d ' -')
+sudo sed -i "s/     - $CONT_ID2/     - ca.org2.example.com\n     - $CONT_ID2/" \
+  /tmp/coffeechain-crypto/peerOrganizations/org2.example.com/ca/fabric-ca-server-config.yaml
 
-export FABRIC_CA_CLIENT_HOME=/tmp/fabric-ca-client/org1
+# 2. Xoá cert cũ (write-protected, cần sudo)
+sudo rm -f /tmp/coffeechain-crypto/peerOrganizations/org1.example.com/ca/tls-cert.pem
+sudo rm -f /tmp/coffeechain-crypto/peerOrganizations/org2.example.com/ca/tls-cert.pem
 
-fabric-ca-client enroll \
-  -u https://admin:adminpw@ca.org1.example.com:7054 \
-  --caname ca-org1 --tls.certfiles /crypto/org1/ca/ca.crt
+# 3. Restart để regenerate
+sudo docker restart ca.org1.example.com ca.org2.example.com && sleep 6
 
-# Farmer
-fabric-ca-client register --caname ca-org1 \
-  --id.name farmer_alice --id.secret pw123 \
-  --id.type client \
-  --id.attrs "role=FARMER:ecert" \
-  --tls.certfiles /crypto/org1/ca/ca.crt
+# 4. Xác nhận
+openssl x509 -in /tmp/coffeechain-crypto/peerOrganizations/org1.example.com/ca/tls-cert.pem \
+  -noout -text 2>/dev/null | grep "DNS:"
+# → DNS:ca.org1.example.com, DNS:<container-id>, DNS:localhost
+```
 
-fabric-ca-client enroll \
-  -u https://farmer_alice:pw123@ca.org1.example.com:7054 \
-  --caname ca-org1 -M /crypto/org1/users/farmer_alice/msp \
-  --enrollment.attrs "role" \
-  --tls.certfiles /crypto/org1/ca/ca.crt
+---
 
-# Processor
-fabric-ca-client register --caname ca-org1 \
-  --id.name processor_bob --id.secret pw123 \
-  --id.type client \
-  --id.attrs "role=PROCESSOR:ecert" \
-  --tls.certfiles /crypto/org1/ca/ca.crt
+### `Permission denied` khi xoá `/tmp/coffeechain-crypto/`
 
-fabric-ca-client enroll \
-  -u https://processor_bob:pw123@ca.org1.example.com:7054 \
-  --caname ca-org1 -M /crypto/org1/users/processor_bob/msp \
-  --enrollment.attrs "role" \
-  --tls.certfiles /crypto/org1/ca/ca.crt
+CA container chạy bằng root, tạo files owned by root:
 
-# Roaster
-fabric-ca-client register --caname ca-org1 \
-  --id.name roaster_charlie --id.secret pw123 \
-  --id.type client \
-  --id.attrs "role=ROASTER:ecert" \
-  --tls.certfiles /crypto/org1/ca/ca.crt
+```bash
+sudo rm -rf /tmp/coffeechain-crypto /tmp/coffeechain-artifacts
+```
 
-fabric-ca-client enroll \
-  -u https://roaster_charlie:pw123@ca.org1.example.com:7054 \
-  --caname ca-org1 -M /crypto/org1/users/roaster_charlie/msp \
-  --enrollment.attrs "role" \
-  --tls.certfiles /crypto/org1/ca/ca.crt
+---
 
-# ── Org2 Users ────────────────────────────────────────────────
+### `./gradlew: Permission denied`
 
-export FABRIC_CA_CLIENT_HOME=/tmp/fabric-ca-client/org2
+Project trên NTFS, dùng `bash`:
+```bash
+cd chaincode && bash gradlew shadowJar
+```
 
-fabric-ca-client enroll \
-  -u https://admin:adminpw@ca.org2.example.com:8054 \
-  --caname ca-org2 --tls.certfiles /crypto/org2/ca/ca.crt
+---
 
-# Packager
-fabric-ca-client register --caname ca-org2 \
-  --id.name packager_dave --id.secret pw123 \
+### Port 8080 bị chiếm
+
+```bash
+ss -tlnp | grep :8080
+sudo kill -9 <PID>
+# Hoặc đổi port: sửa "8080:8080" → "9090:8080" trong docker-compose
+```
+
+---
+
+### `docker: permission denied`
+
+```bash
+sudo usermod -aG docker $USER
+newgrp docker
+```

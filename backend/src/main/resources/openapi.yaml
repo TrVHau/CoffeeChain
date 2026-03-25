@@ -1,0 +1,770 @@
+openapi: 3.0.3
+info:
+  title: CoffeeChain Trace API
+  description: |
+    REST API for the CoffeeChain coffee supply-chain traceability backend.
+    All authenticated endpoints require a Bearer JWT obtained from POST /api/auth/login.
+  version: 1.0.0
+  contact:
+    name: CoffeeChain Backend Unit-2
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+    description: Login and token management
+  - name: Farmer
+    description: HARVEST batch creation and farm activity management (ROLE_FARMER)
+  - name: Processor
+    description: PROCESSED batch creation (ROLE_PROCESSOR)
+  - name: Roaster
+    description: ROAST batch creation, evidence upload, transfer request (ROLE_ROASTER)
+  - name: Packager
+    description: Accept transfer, PACKAGED batch, QR code (ROLE_PACKAGER)
+  - name: Retailer
+    description: Status update to IN_STOCK / SOLD (ROLE_RETAILER)
+  - name: Trace
+    description: Public provenance trace by QR public code
+  - name: Query
+    description: Authenticated batch query endpoints
+
+paths:
+  # ─────────────────────────────────────────────
+  # Auth
+  # ─────────────────────────────────────────────
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login and receive JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, password]
+              properties:
+                userId:
+                  type: string
+                  example: farmer_alice
+                password:
+                  type: string
+                  example: pw123
+      responses:
+        "200":
+          description: JWT token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ─────────────────────────────────────────────
+  # Farmer
+  # ─────────────────────────────────────────────
+  /api/harvest:
+    post:
+      tags: [Farmer]
+      summary: Create harvest batch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateHarvestBatchRequest"
+      responses:
+        "200":
+          description: Created batch from ledger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchView"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/harvest/{id}/activity:
+    post:
+      tags: [Farmer]
+      summary: Record farm activity on a harvest batch
+      parameters:
+        - $ref: "#/components/parameters/batchId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordFarmActivityRequest"
+      responses:
+        "200":
+          description: Updated batch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchView"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/harvest/{id}/status:
+    patch:
+      tags: [Farmer]
+      summary: Update harvest batch status
+      parameters:
+        - $ref: "#/components/parameters/batchId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStatusRequest"
+      responses:
+        "200":
+          description: Updated batch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchView"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ─────────────────────────────────────────────
+  # Processor
+  # ─────────────────────────────────────────────
+  /api/process:
+    post:
+      tags: [Processor]
+      summary: Create processed batch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProcessedBatchRequest"
+      responses:
+        "200":
+          description: Created batch from ledger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchView"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/process/{id}/status:
+    patch:
+      tags: [Processor]
+      summary: Update processed batch status
+      parameters:
+        - $ref: "#/components/parameters/batchId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStatusRequest"
+      responses:
+        "200":
+          description: Updated batch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchView"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ─────────────────────────────────────────────
+  # Roaster
+  # ─────────────────────────────────────────────
+  /api/roast:
+    post:
+      tags: [Roaster]
+      summary: Create roast batch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRoastBatchRequest"
+      responses:
+        "200":
+          description: Created batch from ledger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchView"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/roast/{id}/evidence:
+    post:
+      tags: [Roaster]
+      summary: Add IPFS evidence to a roast batch
+      parameters:
+        - $ref: "#/components/parameters/batchId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddEvidenceRequest"
+      responses:
+        "200":
+          description: Updated batch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchView"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/roast/{id}/status:
+    patch:
+      tags: [Roaster]
+      summary: Update roast batch status
+      parameters:
+        - $ref: "#/components/parameters/batchId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStatusRequest"
+      responses:
+        "200":
+          description: Updated batch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchView"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/transfer/request:
+    post:
+      tags: [Roaster]
+      summary: "Request transfer of roast batch to Org2 (body: { batchId, toMSP })"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransferRequest"
+      responses:
+        "200":
+          description: Batch with TRANSFER_PENDING status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchView"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ─────────────────────────────────────────────
+  # Packager
+  # ─────────────────────────────────────────────
+  /api/transfer/accept/{id}:
+    post:
+      tags: [Packager]
+      summary: Accept transfer (SBE AND — Org1 + Org2 must endorse)
+      parameters:
+        - $ref: "#/components/parameters/batchId"
+      responses:
+        "200":
+          description: Accepted batch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchView"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/package:
+    post:
+      tags: [Packager]
+      summary: Create packaged batch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePackagedBatchRequest"
+      responses:
+        "200":
+          description: Created batch from ledger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchView"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/package/{id}/qr:
+    get:
+      tags: [Packager]
+      summary: Get QR code image for a packaged batch
+      parameters:
+        - $ref: "#/components/parameters/batchId"
+      responses:
+        "200":
+          description: PNG QR code image
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "501":
+          description: QrCodeService not yet integrated (Unit-3 pending)
+
+  # ─────────────────────────────────────────────
+  # Retailer
+  # ─────────────────────────────────────────────
+  /api/retail/{id}/status:
+    patch:
+      tags: [Retailer]
+      summary: Update batch status (IN_STOCK or SOLD)
+      parameters:
+        - $ref: "#/components/parameters/batchId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStatusRequest"
+      responses:
+        "200":
+          description: Updated batch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchView"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  # ─────────────────────────────────────────────
+  # Trace (public)
+  # ─────────────────────────────────────────────
+  /api/trace/{publicCode}:
+    get:
+      tags: [Trace]
+      summary: Get full provenance trace by public code (no auth required)
+      security: []
+      parameters:
+        - name: publicCode
+          in: path
+          required: true
+          schema:
+            type: string
+          example: COFF-2024-001
+      responses:
+        "200":
+          description: Full provenance trace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TraceResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/qr/{publicCode}:
+    get:
+      tags: [Trace]
+      summary: Get QR code image by public code (no auth required)
+      security: []
+      parameters:
+        - name: publicCode
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: PNG QR code
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "501":
+          description: QrCodeService not yet integrated
+
+  # ─────────────────────────────────────────────
+  # Query (authenticated)
+  # ─────────────────────────────────────────────
+  /api/batches:
+    get:
+      tags: [Query]
+      summary: List batches with optional filters
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [HARVEST, PROCESSED, ROAST, PACKAGED]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum:
+              [
+                CREATED,
+                IN_PROCESS,
+                COMPLETED,
+                TRANSFER_PENDING,
+                TRANSFERRED,
+                IN_STOCK,
+                SOLD,
+              ]
+        - name: ownerMSP
+          in: query
+          schema:
+            type: string
+            enum: [Org1MSP, Org2MSP]
+      responses:
+        "200":
+          description: List of batches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BatchResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/batch/{id}:
+    get:
+      tags: [Query]
+      summary: Get single batch by ID (PostgreSQL or Fabric ledger)
+      parameters:
+        - $ref: "#/components/parameters/batchId"
+        - name: source
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [chain]
+          description: Pass `chain` to read directly from the Fabric ledger
+      responses:
+        "200":
+          description: Batch detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+# ─────────────────────────────────────────────────────────────
+# Components
+# ─────────────────────────────────────────────────────────────
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    batchId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Internal batch UUID on the ledger
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid JWT
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Authenticated but insufficient role
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        userId:
+          type: string
+        role:
+          type: string
+        org:
+          type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        path:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    BatchResponse:
+      type: object
+      properties:
+        batchId:
+          type: string
+        publicCode:
+          type: string
+        type:
+          type: string
+        parentBatchId:
+          type: string
+          nullable: true
+        ownerMsp:
+          type: string
+        ownerUserId:
+          type: string
+        status:
+          type: string
+        pendingToMsp:
+          type: string
+          nullable: true
+        evidenceHash:
+          type: string
+          nullable: true
+        evidenceUri:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    # Ledger view (raw response from Fabric chaincode)
+    BatchView:
+      type: object
+      additionalProperties: true
+      description: Raw JSON returned from the Fabric chaincode (schema mirrors Batch.java on ledger)
+
+    TraceResponse:
+      type: object
+      properties:
+        batch:
+          $ref: "#/components/schemas/BatchResponse"
+        parentChain:
+          type: array
+          items:
+            $ref: "#/components/schemas/BatchResponse"
+        farmActivities:
+          type: array
+          items:
+            $ref: "#/components/schemas/FarmActivityItem"
+        ledgerRefs:
+          type: array
+          items:
+            $ref: "#/components/schemas/LedgerRefItem"
+
+    FarmActivityItem:
+      type: object
+      properties:
+        activityType:
+          type: string
+        activityDate:
+          type: string
+          format: date
+        note:
+          type: string
+        evidenceHash:
+          type: string
+        evidenceUri:
+          type: string
+
+    LedgerRefItem:
+      type: object
+      properties:
+        eventName:
+          type: string
+        txId:
+          type: string
+        blockNumber:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateHarvestBatchRequest:
+      type: object
+      required: [farmLocation, harvestDate, coffeeVariety, weightKg]
+      properties:
+        farmLocation:
+          type: string
+        harvestDate:
+          type: string
+          format: date
+        coffeeVariety:
+          type: string
+        weightKg:
+          type: string
+
+    CreateProcessedBatchRequest:
+      type: object
+      required:
+        [
+          parentBatchId,
+          processingMethod,
+          startDate,
+          endDate,
+          facilityName,
+          weightKg,
+        ]
+      properties:
+        parentBatchId:
+          type: string
+        processingMethod:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        facilityName:
+          type: string
+        weightKg:
+          type: string
+
+    CreateRoastBatchRequest:
+      type: object
+      required:
+        [parentBatchId, roastProfile, roastDate, roastDurationMinutes, weightKg]
+      properties:
+        parentBatchId:
+          type: string
+        roastProfile:
+          type: string
+        roastDate:
+          type: string
+          format: date
+        roastDurationMinutes:
+          type: string
+        weightKg:
+          type: string
+
+    CreatePackagedBatchRequest:
+      type: object
+      required:
+        [parentBatchId, packageWeight, packageDate, expiryDate, packageCount]
+      properties:
+        parentBatchId:
+          type: string
+        packageWeight:
+          type: string
+        packageDate:
+          type: string
+          format: date
+        expiryDate:
+          type: string
+          format: date
+        packageCount:
+          type: string
+
+    RecordFarmActivityRequest:
+      type: object
+      required: [harvestBatchId, activityType, activityDate]
+      properties:
+        harvestBatchId:
+          type: string
+        activityType:
+          type: string
+          enum:
+            [
+              IRRIGATION,
+              FERTILIZATION,
+              PEST_CONTROL,
+              PRUNING,
+              SHADE_MANAGEMENT,
+              SOIL_TEST,
+              OTHER,
+            ]
+        activityDate:
+          type: string
+          format: date
+        note:
+          type: string
+        evidenceHash:
+          type: string
+        evidenceUri:
+          type: string
+
+    AddEvidenceRequest:
+      type: object
+      required: [evidenceHash, evidenceUri]
+      properties:
+        evidenceHash:
+          type: string
+        evidenceUri:
+          type: string
+
+    TransferRequest:
+      type: object
+      required: [batchId, toMSP]
+      properties:
+        batchId:
+          type: string
+          description: ID of the batch to transfer
+        toMSP:
+          type: string
+          enum: [Org2MSP]
+
+    UpdateStatusRequest:
+      type: object
+      required: [newStatus]
+      properties:
+        newStatus:
+          type: string
+          enum:
+            [
+              CREATED,
+              IN_PROCESS,
+              COMPLETED,
+              TRANSFER_PENDING,
+              TRANSFERRED,
+              IN_STOCK,
+              SOLD,
+            ]

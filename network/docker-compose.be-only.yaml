@@ -1,0 +1,111 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# docker-compose.be-only.yaml
+# Deploy Backend-Only stack for endpoint testing (no Fabric network required)
+#
+# Services started:
+#   postgres  — PostgreSQL 15 (read-model + auth)
+#   ipfs      — IPFS Kubo (evidence storage)
+#   backend   — Spring Boot 3 API server
+#
+# Fabric-dependent endpoints (POST /api/harvest, /api/process, etc.)
+# will return HTTP 500 — this is expected without the Fabric network.
+#
+# Auth, trace, and read-model endpoints fully work.
+#
+# Usage (from the network/ directory):
+#   docker compose -f docker-compose.be-only.yaml up --build
+#
+# Backend available at: http://localhost:8080
+# Swagger UI at:        http://localhost:8080/swagger-ui.html
+# ─────────────────────────────────────────────────────────────────────────────
+
+version: '3.8'
+
+networks:
+  default:
+    name: coffee_network  # Use same network as main docker-compose.yaml
+
+volumes:
+  postgres-data:
+  ipfs-data:
+  # Crypto config is optional for be-only mode, but needed for Fabric endpoints
+  # crypto-data:
+
+services:
+
+  # ── PostgreSQL 15 ──────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    environment:
+      - POSTGRES_DB=coffeetrace
+      - POSTGRES_USER=coffeetrace
+      - POSTGRES_PASSWORD=secret
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coffeetrace"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── IPFS Kubo ──────────────────────────────────────────────────────────────
+  ipfs:
+    image: ipfs/kubo:latest
+    container_name: ipfs
+    volumes:
+      - ipfs-data:/data/ipfs
+    ports:
+      - "5001:5001"   # IPFS API  (used by EvidenceService)
+      - "8081:8080"   # IPFS Gateway (browser access to content)
+    environment:
+      - IPFS_PROFILE=server
+
+  # ── Spring Boot Backend ────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: backend
+    environment:
+      # Database
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/coffeetrace
+      - SPRING_DATASOURCE_USERNAME=coffeetrace
+      - DB_PASSWORD=secret
+
+      # Fabric config (values required by FabricConfig bean, gateways will
+      # fail gracefully at init — expected without running Fabric network)
+      - FABRIC_CHANNEL_NAME=coffee-traceability-channel
+      - FABRIC_CHAINCODE_NAME=CoffeeTraceChaincode
+      - FABRIC_ORG1_PEER_ENDPOINT=peer0.org1.example.com:7051
+      - FABRIC_ORG2_PEER_ENDPOINT=peer0.org2.example.com:9051
+      - FABRIC_ORG1_MSP_ID=Org1MSP
+      - FABRIC_ORG2_MSP_ID=Org2MSP
+      - FABRIC_ORG1_TLS_CERT_PATH=/crypto/peerOrganizations/org1.example.com/tlsca/tlsca.org1.example.com-cert.pem
+      - FABRIC_ORG2_TLS_CERT_PATH=/crypto/peerOrganizations/org2.example.com/tlsca/tlsca.org2.example.com-cert.pem
+      - FABRIC_ORG1_ADMIN_CERT_PATH=/crypto/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/signcerts/Admin@org1.example.com-cert.pem
+      - FABRIC_ORG1_ADMIN_KEY_PATH=/crypto/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/keystore/
+      - FABRIC_ORG2_ADMIN_CERT_PATH=/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp/signcerts/Admin@org2.example.com-cert.pem
+      - FABRIC_ORG2_ADMIN_KEY_PATH=/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp/keystore/
+      - FABRIC_ORG1_USERS_BASE_PATH=/crypto/peerOrganizations/org1.example.com/users
+      - FABRIC_ORG2_USERS_BASE_PATH=/crypto/peerOrganizations/org2.example.com/users
+
+      # IPFS
+      - IPFS_API_URL=http://ipfs:5001
+
+      # Public QR base URL
+      - TRACE_PUBLIC_BASE_URL=http://localhost:3000/trace/
+
+      # JWT secret (keep this value or override with your own 32+ char secret)
+      - JWT_SECRET=coffee-chain-demo-secret-key-at-least-32-chars!!
+    volumes:
+      - ${CRYPTO_BASE:-/tmp/coffeechain-crypto}:/crypto
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ipfs:
+        condition: service_started

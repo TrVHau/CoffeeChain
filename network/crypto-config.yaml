@@ -1,0 +1,45 @@
+# network/crypto-config.yaml
+# [Unit-3] BE-Member-3
+#
+# Hyperledger Fabric cryptogen config — generates all crypto material.
+#
+# Usage:
+#   cryptogen generate --config=./crypto-config.yaml --output=./crypto-config
+#
+# Output structure:
+#   crypto-config/
+#     ordererOrganizations/example.com/
+#     peerOrganizations/org1.example.com/
+#     peerOrganizations/org2.example.com/
+
+OrdererOrgs:
+  - Name: Orderer
+    Domain: example.com
+    EnableNodeOUs: true
+    Specs:
+      - Hostname: orderer
+        SANS:
+          - localhost
+
+PeerOrgs:
+  # Org1: FARMER, PROCESSOR, ROASTER
+  - Name: Org1
+    Domain: org1.example.com
+    EnableNodeOUs: true
+    Template:
+      Count: 1         # peer0.org1.example.com
+      SANS:
+        - localhost
+    Users:
+      Count: 5         # Admin + farmer_alice + processor_bob + roaster_charlie + (spare)
+
+  # Org2: PACKAGER, RETAILER
+  - Name: Org2
+    Domain: org2.example.com
+    EnableNodeOUs: true
+    Template:
+      Count: 1         # peer0.org2.example.com
+      SANS:
+        - localhost
+    Users:
+      Count: 3         # Admin + packager_dave + retailer_eve
