@@ -9,6 +9,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 @RestController
@@ -30,6 +31,19 @@ public class RetailerController {
                                           @PathVariable String id,
                                           @Valid @RequestBody UpdateStatusRequest req) throws Exception {
         byte[] result = fabricGateway.submitAs(userId, "updateBatchStatus", id, req.getNewStatus());
-        return ResponseEntity.ok(objectMapper.readValue(result, Map.class));
+        return ResponseEntity.ok(toResponse(result, "updateBatchStatus"));
+    }
+
+    private Map<String, Object> toResponse(byte[] result, String action) throws Exception {
+        if (result == null || result.length == 0) {
+            return Map.of("status", "SUCCESS", "action", action);
+        }
+
+        String payload = new String(result, StandardCharsets.UTF_8).trim();
+        if (payload.isEmpty()) {
+            return Map.of("status", "SUCCESS", "action", action);
+        }
+
+        return objectMapper.readValue(payload, Map.class);
     }
 }

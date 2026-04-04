@@ -14,6 +14,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 @RestController
@@ -50,7 +51,7 @@ public class PackagerController {
     public ResponseEntity<?> acceptTransfer(@AuthenticationPrincipal String userId,
                                             @PathVariable String id) throws Exception {
         byte[] result = fabricGateway.submitAcceptTransfer(userId, id);
-        return ResponseEntity.ok(objectMapper.readValue(result, Map.class));
+        return ResponseEntity.ok(toResponse(result, "acceptTransfer"));
     }
 
     /** POST /api/package — create a PackagedBatch */
@@ -70,7 +71,7 @@ public class PackagerController {
                 req.getExpiryDate(),
                 publicBaseUrl
         );
-        return ResponseEntity.ok(objectMapper.readValue(result, Map.class));
+        return ResponseEntity.ok(toResponse(result, "createPackagedBatch"));
     }
 
     /**
@@ -83,5 +84,18 @@ public class PackagerController {
         return batchRepository.findById(id)
                 .map(batch -> ResponseEntity.ok(qrCodeService.generateQrPng(batch.getPublicCode())))
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    private Map<String, Object> toResponse(byte[] result, String action) throws Exception {
+        if (result == null || result.length == 0) {
+            return Map.of("status", "SUCCESS", "action", action);
+        }
+
+        String payload = new String(result, StandardCharsets.UTF_8).trim();
+        if (payload.isEmpty()) {
+            return Map.of("status", "SUCCESS", "action", action);
+        }
+
+        return objectMapper.readValue(payload, Map.class);
     }
 }

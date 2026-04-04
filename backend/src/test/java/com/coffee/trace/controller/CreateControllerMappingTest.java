@@ -40,7 +40,7 @@ class CreateControllerMappingTest {
 
     @BeforeEach
     void commonStubs() throws Exception {
-        when(objectMapper.readValue(any(byte[].class), eq(Map.class))).thenReturn(Map.of("ok", true));
+                when(objectMapper.readValue(any(String.class), eq(Map.class))).thenReturn(Map.of("ok", true));
     }
 
     @Test

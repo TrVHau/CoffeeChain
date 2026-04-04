@@ -27,6 +27,7 @@ public class CoffeeTraceChaincode implements ContractInterface {
     private byte[] buildBatchPayload(Context ctx, Batch b) {
         return JSON.serializeMap(stableEventMap(
             "batchId", b.getBatchId(),
+            "parentBatchId", b.getParentBatchId(),
             "type", b.getType(),
             "ownerMSP", b.getOwnerMSP(),
             "publicCode", b.getPublicCode(),

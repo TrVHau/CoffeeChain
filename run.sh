@@ -36,6 +36,28 @@ print_error() {
   echo -e "${RED}✗ $1${NC}"
 }
 
+# Ensure containerized backend can traverse/read generated crypto material.
+fix_crypto_permissions() {
+  local crypto_path="/tmp/coffeechain-crypto"
+
+  if [ ! -d "$crypto_path" ]; then
+    print_step "Skipping crypto permission fix (not found: $crypto_path)"
+    return
+  fi
+
+  print_step "Fixing crypto permissions for backend container access..."
+
+  if command -v sudo &> /dev/null; then
+    sudo chmod -R go+r "$crypto_path" || true
+    sudo find "$crypto_path" -type d -exec chmod go+rx {} \; || true
+  else
+    chmod -R go+r "$crypto_path" || true
+    find "$crypto_path" -type d -exec chmod go+rx {} \; || true
+  fi
+
+  print_success "Crypto permissions adjusted"
+}
+
 # Check prerequisites
 check_prereqs() {
   print_header "Checking Prerequisites"
@@ -84,6 +106,7 @@ setup() {
   print_header "STEP 2: Register Demo Users"
   print_step "Running register-users.sh..."
   bash scripts/register-users.sh
+  fix_crypto_permissions
   print_success "Users registered"
   
   print_header "STEP 3: Build & Deploy Chaincode"
@@ -154,6 +177,7 @@ start() {
   fi
   
   print_step "Starting Docker containers..."
+  fix_crypto_permissions
   docker compose up -d
   
   # Wait for backend

@@ -129,10 +129,6 @@ public class EventIndexerService {
 
         log.debug("Event received: {} txId={} block={}", eventName, txId, blockNum);
 
-        // Always record in ledger_refs (append-only audit trail)
-        String batchId = payload.getOrDefault("batchId", payload.getOrDefault("harvestBatchId", ""));
-        ledgerRefRepository.save(batchId, eventName, txId, String.valueOf(blockNum));
-
         switch (eventName) {
             case "BATCH_CREATED"          -> handleBatchCreated(payload, txId, blockNum);
             case "BATCH_STATUS_UPDATED"   -> handleStatusUpdated(payload);
@@ -143,6 +139,12 @@ public class EventIndexerService {
             case "BATCH_IN_STOCK"         -> handleStatusUpdated(payload);
             case "BATCH_SOLD"             -> handleStatusUpdated(payload);
             default -> log.debug("Unknown event '{}' — recorded in ledger_refs only", eventName);
+        }
+
+        // Record audit trail after state mutations to avoid FK race with BATCH_CREATED.
+        String batchId = payload.getOrDefault("batchId", payload.getOrDefault("harvestBatchId", ""));
+        if (batchId != null && !batchId.isBlank()) {
+            ledgerRefRepository.save(batchId, eventName, txId, String.valueOf(blockNum));
         }
     }
 

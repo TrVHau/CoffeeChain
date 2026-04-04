@@ -166,12 +166,12 @@ cd /duong-dan/CoffeeChain/backend
 mvn clean package -DskipTests
 ```
 
-## 3.8 Start backend + db + ipfs (khong can frontend)
-Quan trong: frontend hien co the fail build trong mot so moi truong, khong anh huong API test.
+## 3.8 Start full stack (khuyen nghi)
+Frontend da duoc fix Docker build, co the chay cung backend de test QR/trace UI.
 
 ```bash
 cd /duong-dan/CoffeeChain/network
-docker compose up -d postgres ipfs backend
+docker compose up -d
 ```
 
 Xac minh backend:
@@ -231,55 +231,97 @@ pm.environment.set("batchId", res.batchId);
 pm.environment.set("publicCode", res.publicCode);
 ```
 
-## 4.4 Processor receive
-- `POST {{base_url}}/api/processing/receive/{{batchId}}`
-- Login bang `processor_bob/pw123` truoc, cap nhat `token`
-
-## 4.5 Processor process
-- `POST {{base_url}}/api/processing/process/{{batchId}}`
-- Body vi du:
+## 4.4 Farmer complete harvest
+- `PATCH {{base_url}}/api/harvest/{{batchId}}/status`
+- Body:
 ```json
 {
-  "method": "Wet",
-  "notes": "Washed and dried"
+  "newStatus": "COMPLETED"
 }
 ```
 
-## 4.6 Roaster roast
+## 4.5 Processor create processed batch
+- Login `processor_bob/pw123`
+- `POST {{base_url}}/api/process`
+- Body:
+```json
+{
+  "parentBatchId": "{{batchId}}",
+  "processingMethod": "Washed",
+  "startDate": "2026-03-22",
+  "endDate": "2026-03-24",
+  "facilityName": "Da Lat Mill",
+  "weightKg": "460.0"
+}
+```
+
+Luu `processedBatchId` tu response. Sau do complete:
+- `PATCH {{base_url}}/api/process/{{processedBatchId}}/status`
+- Body: `{ "newStatus": "COMPLETED" }`
+
+## 4.6 Roaster create roast batch
 - Login `roaster_charlie/pw123`
-- `POST {{base_url}}/api/roasting/roast/{{batchId}}`
-- Body vi du:
+- `POST {{base_url}}/api/roast`
+- Body:
 ```json
 {
-  "roastLevel": "Medium",
-  "temperature": "200C"
+  "parentBatchId": "{{processedBatchId}}",
+  "roastProfile": "Medium",
+  "roastDate": "2026-03-25",
+  "roastDurationMinutes": "12",
+  "weightKg": "430.0"
 }
 ```
 
-## 4.7 Packager package
-- Login `packager_dave/pw123`
-- `POST {{base_url}}/api/packaging/package/{{batchId}}`
-- Body vi du:
+Luu `roastBatchId` tu response. Sau do complete:
+- `PATCH {{base_url}}/api/roast/{{roastBatchId}}/status`
+- Body: `{ "newStatus": "COMPLETED" }`
+
+## 4.7 Request + accept transfer sang Org2
+- Roaster request transfer:
+  - `POST {{base_url}}/api/transfer/request`
+  - Body: `{ "batchId": "{{roastBatchId}}", "toMSP": "Org2MSP" }`
+- Login `packager_dave/pw123`, accept:
+  - `POST {{base_url}}/api/transfer/accept/{{roastBatchId}}`
+
+## 4.8 Packager create packaged batch
+- `POST {{base_url}}/api/package`
+- Body:
 ```json
 {
-  "packageType": "Bag",
-  "size": "500g"
+  "parentBatchId": "{{roastBatchId}}",
+  "packageWeight": "250",
+  "packageCount": "1000",
+  "packageDate": "2026-03-26",
+  "expiryDate": "2027-03-26"
 }
 ```
 
-## 4.8 Retailer receive
+Luu `packagedBatchId` va `publicCode`.
+
+## 4.9 Retailer update stock/sold
 - Login `retailer_eve/pw123`
-- `POST {{base_url}}/api/retail/receive/{{batchId}}`
+- `PATCH {{base_url}}/api/retail/{{packagedBatchId}}/status`
+- Body IN_STOCK:
+```json
+{ "newStatus": "IN_STOCK" }
+```
+- Body SOLD:
+```json
+{ "newStatus": "SOLD" }
+```
 
-## 4.9 Public trace
-- `GET {{base_url}}/api/public/trace/{{publicCode}}`
-- Ky vong thay full lifecycle cua batch
+## 4.10 Public trace
+- `GET {{base_url}}/api/trace/{{publicCode}}`
+- Ky vong thay parent chain + ledger refs
 
-## 4.10 Kiem tra nhanh bang curl (khong can Postman)
+## 4.11 Kiem tra nhanh bang curl (khong can Postman)
 ```bash
 TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"userId":"farmer_alice","password":"pw123"}' | jq -r '.token')
+
+# Luu y: token tra ve da co san prefix "Bearer "
 
 curl -s -X POST http://localhost:8080/api/harvest \
   -H "Content-Type: application/json" \
@@ -311,12 +353,14 @@ bash scripts/register-users.sh
 bash scripts/deploy-chaincode.sh
 ```
 
-### 5.3 Loi frontend build khi `docker compose up -d`
-Khong can frontend de test backend API.
+### 5.3 API tra loi 500 voi message `No content to map due to end-of-input`
+Nguyen nhan: backend image cu chua co fix parser payload rong tu chaincode.
 
-Dung lenh nay thay the:
+Fix:
 ```bash
-docker compose up -d postgres ipfs backend
+cd /duong-dan/CoffeeChain/network
+docker compose build backend
+docker compose up -d backend
 ```
 
 ## 6. Bo Lenh "Reset va Chay Lai Tu Dau" (Copy-Paste)
