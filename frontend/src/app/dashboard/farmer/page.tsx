@@ -29,6 +29,7 @@ export default function FarmerDashboardPage() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [form, setForm] = useState<CreateHarvestInput>(INITIAL_FORM);
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [batches, setBatches] = useState<BatchResponse[]>([]);
 
   async function refresh() {
@@ -51,12 +52,19 @@ export default function FarmerDashboardPage() {
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
+    if (!evidenceFile) {
+      setError('Vui lòng chọn ảnh minh chứng trước khi tạo Harvest batch.');
+      return;
+    }
     setSubmitting(true);
     setError('');
     setMessage('');
     try {
-      await dashboardApi.createHarvest(form);
+      const created = await dashboardApi.createHarvest(form);
+      const evidence = await dashboardApi.uploadEvidence(evidenceFile);
+      await dashboardApi.addHarvestEvidence(created.batchId, evidence);
       setForm(INITIAL_FORM);
+      setEvidenceFile(null);
       setMessage('Tạo Harvest batch thành công.');
       await refresh();
     } catch (e) {
@@ -85,8 +93,8 @@ export default function FarmerDashboardPage() {
   return (
     <DashboardShell title="Farmer Dashboard" subtitle="Quản lý Harvest batch và nhật ký canh tác">
       <div className="grid gap-6 xl:grid-cols-[380px,1fr]">
-        <section className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-rose-900">Tạo Harvest batch</h2>
+        <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
+          <h2 className="text-base font-semibold text-amber-900">Tạo Harvest batch</h2>
           <form onSubmit={handleCreate} className="mt-4 space-y-3">
             <label className="block text-sm">
               <span className="mb-1 block font-medium text-slate-700">Địa điểm nông trại</span>
@@ -94,7 +102,7 @@ export default function FarmerDashboardPage() {
                 value={form.farmLocation}
                 onChange={(e) => setForm((p) => ({ ...p, farmLocation: e.target.value }))}
                 required
-                className="w-full rounded-lg border border-rose-200 px-3 py-2 outline-none ring-rose-400 focus:ring"
+                className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
                 placeholder="Da Lat"
               />
             </label>
@@ -105,7 +113,7 @@ export default function FarmerDashboardPage() {
                 value={form.harvestDate}
                 onChange={(e) => setForm((p) => ({ ...p, harvestDate: e.target.value }))}
                 required
-                className="w-full rounded-lg border border-rose-200 px-3 py-2 outline-none ring-rose-400 focus:ring"
+                className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
               />
             </label>
             <label className="block text-sm">
@@ -114,7 +122,7 @@ export default function FarmerDashboardPage() {
                 value={form.coffeeVariety}
                 onChange={(e) => setForm((p) => ({ ...p, coffeeVariety: e.target.value }))}
                 required
-                className="w-full rounded-lg border border-rose-200 px-3 py-2 outline-none ring-rose-400 focus:ring"
+                className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
                 placeholder="Arabica"
               />
             </label>
@@ -127,27 +135,38 @@ export default function FarmerDashboardPage() {
                 value={form.weightKg}
                 onChange={(e) => setForm((p) => ({ ...p, weightKg: e.target.value }))}
                 required
-                className="w-full rounded-lg border border-rose-200 px-3 py-2 outline-none ring-rose-400 focus:ring"
+                className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
                 placeholder="500"
               />
             </label>
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium text-slate-700">Ảnh minh chứng</span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setEvidenceFile(e.target.files?.[0] ?? null)}
+                required
+                className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
+              />
+            </label>
+            {evidenceFile && <p className="text-xs text-slate-500">Đã chọn: {evidenceFile.name}</p>}
             <button
               type="submit"
               disabled={submitting}
-              className="w-full rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-800 disabled:opacity-50"
+              className="w-full rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-800 disabled:opacity-50"
             >
               {submitting ? 'Đang tạo...' : 'Tạo batch'}
             </button>
           </form>
         </section>
 
-        <section className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
+        <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-rose-900">Danh sách Harvest</h2>
+            <h2 className="text-base font-semibold text-amber-900">Danh sách Harvest</h2>
             <button
               type="button"
               onClick={() => void refresh()}
-              className="rounded-lg border border-rose-200 px-3 py-1.5 text-sm text-rose-700 hover:bg-rose-50"
+              className="rounded-lg border border-amber-200 px-3 py-1.5 text-sm text-amber-700 hover:bg-amber-50"
             >
               Làm mới
             </button>
@@ -162,7 +181,7 @@ export default function FarmerDashboardPage() {
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
-                  <tr className="border-b border-rose-100 text-left text-slate-500">
+                  <tr className="border-b border-amber-100 text-left text-slate-500">
                     <th className="px-2 py-2 font-medium">Mã công khai</th>
                     <th className="px-2 py-2 font-medium">Trạng thái</th>
                     <th className="px-2 py-2 font-medium">Cập nhật</th>
@@ -171,7 +190,7 @@ export default function FarmerDashboardPage() {
                 </thead>
                 <tbody>
                   {batches.map((batch) => (
-                    <tr key={batch.batchId} className="border-b border-rose-50">
+                    <tr key={batch.batchId} className="border-b border-amber-50">
                       <td className="px-2 py-2 font-mono text-xs text-slate-700">{batch.publicCode}</td>
                       <td className="px-2 py-2"><StatusBadge status={batch.status} /></td>
                       <td className="px-2 py-2 text-slate-600">{new Date(batch.updatedAt).toLocaleString('vi-VN')}</td>
@@ -179,7 +198,7 @@ export default function FarmerDashboardPage() {
                         <div className="flex flex-wrap gap-2">
                           <Link
                             href={`/dashboard/farmer/${encodeURIComponent(batch.batchId)}`}
-                            className="rounded-md border border-rose-200 px-2 py-1 text-xs text-rose-700 hover:bg-rose-50"
+                            className="rounded-md border border-amber-200 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50"
                           >
                             Chi tiết
                           </Link>
@@ -187,7 +206,7 @@ export default function FarmerDashboardPage() {
                             <button
                               type="button"
                               onClick={() => void handleUpdateStatus(batch.batchId, 'IN_PROCESS')}
-                              className="rounded-md bg-rose-100 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-200"
+                              className="rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-200"
                             >
                               IN_PROCESS
                             </button>

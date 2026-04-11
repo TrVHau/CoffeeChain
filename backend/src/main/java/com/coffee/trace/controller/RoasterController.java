@@ -4,6 +4,7 @@ import com.coffee.trace.dto.request.AddEvidenceRequest;
 import com.coffee.trace.dto.request.CreateRoastBatchRequest;
 import com.coffee.trace.dto.request.TransferRequest;
 import com.coffee.trace.dto.request.UpdateStatusRequest;
+import com.coffee.trace.service.EvidenceService;
 import com.coffee.trace.service.FabricGatewayService;
 import com.coffee.trace.service.PublicCodeService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -11,6 +12,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.bind.annotation.*;
 
 import java.nio.charset.StandardCharsets;
@@ -21,15 +23,40 @@ import java.util.Map;
 public class RoasterController {
 
     private final FabricGatewayService fabricGateway;
+    private final EvidenceService      evidenceService;
     private final PublicCodeService    publicCodeService;
     private final ObjectMapper         objectMapper;
 
     public RoasterController(FabricGatewayService fabricGateway,
+                             EvidenceService evidenceService,
                              PublicCodeService publicCodeService,
                              ObjectMapper objectMapper) {
         this.fabricGateway    = fabricGateway;
+        this.evidenceService  = evidenceService;
         this.publicCodeService = publicCodeService;
         this.objectMapper     = objectMapper;
+    }
+
+    /** POST /api/evidence/upload — upload evidence file and return hash + URI */
+    @PostMapping("/evidence/upload")
+    @PreAuthorize("hasAnyRole('FARMER','PROCESSOR','ROASTER','PACKAGER')")
+    public ResponseEntity<?> uploadEvidence(@RequestParam("file") MultipartFile file) {
+        EvidenceService.EvidenceResult result = evidenceService.process(
+                file.getOriginalFilename() != null ? file.getOriginalFilename() : "evidence",
+                getFileBytes(file)
+        );
+        return ResponseEntity.ok(Map.of(
+                "evidenceHash", result.sha256Hash(),
+                "evidenceUri", result.ipfsUri()
+        ));
+    }
+
+    private byte[] getFileBytes(MultipartFile file) {
+        try {
+            return file.getBytes();
+        } catch (Exception e) {
+            throw new RuntimeException("Không đọc được file minh chứng", e);
+        }
     }
 
     /** POST /api/roast — create a RoastBatch */

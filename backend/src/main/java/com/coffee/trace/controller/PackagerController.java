@@ -1,5 +1,6 @@
 package com.coffee.trace.controller;
 
+import com.coffee.trace.dto.request.AddEvidenceRequest;
 import com.coffee.trace.dto.request.CreatePackagedBatchRequest;
 import com.coffee.trace.repository.BatchRepository;
 import com.coffee.trace.service.FabricGatewayService;
@@ -74,16 +75,27 @@ public class PackagerController {
         return ResponseEntity.ok(toResponse(result, "createPackagedBatch"));
     }
 
+    /** POST /api/package/{id}/evidence — attach evidence hash + IPFS URI */
+    @PostMapping("/package/{id}/evidence")
+    @PreAuthorize("hasRole('PACKAGER')")
+    public ResponseEntity<?> addEvidence(@AuthenticationPrincipal String userId,
+                                         @PathVariable String id,
+                                         @Valid @RequestBody AddEvidenceRequest req) throws Exception {
+        byte[] result = fabricGateway.submitAs(userId, "addEvidence",
+                id, req.getEvidenceHash(), req.getEvidenceUri());
+        return ResponseEntity.ok(objectMapper.readValue(result, Map.class));
+    }
+
     /**
      * GET /api/package/{id}/qr — generate QR code PNG for a batch.
      * Looks up the batch's publicCode from DB and encodes the public trace URL.
      */
     @GetMapping(value = "/package/{id}/qr", produces = MediaType.IMAGE_PNG_VALUE)
-    @PreAuthorize("hasRole('PACKAGER')")
+    @PreAuthorize("hasAnyRole('PACKAGER','RETAILER')")
     public ResponseEntity<byte[]> getQr(@PathVariable String id) {
         return batchRepository.findById(id)
-                .map(batch -> ResponseEntity.ok(qrCodeService.generateQrPng(batch.getPublicCode())))
-                .orElse(ResponseEntity.notFound().build());
+            .map(batch -> ResponseEntity.ok(qrCodeService.generateQrPng(batch.getPublicCode())))
+            .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     private Map<String, Object> toResponse(byte[] result, String action) throws Exception {

@@ -57,6 +57,11 @@ describe('EvidenceVerifier', () => {
       />,
     );
 
+    expect(screen.getByRole('link', { name: /Xem minh chứng/i })).toHaveAttribute(
+      'href',
+      'https://ipfs.io/ipfs/QmEvidenceHash',
+    );
+
     await user.click(screen.getByRole('button', { name: /Xác minh hash chứng cứ/i }));
 
     await waitFor(() => {

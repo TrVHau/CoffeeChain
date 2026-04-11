@@ -1,6 +1,7 @@
 package com.coffee.trace.controller;
 
 import com.coffee.trace.dto.request.CreateProcessedBatchRequest;
+import com.coffee.trace.dto.request.AddEvidenceRequest;
 import com.coffee.trace.dto.request.UpdateStatusRequest;
 import com.coffee.trace.service.FabricGatewayService;
 import com.coffee.trace.service.PublicCodeService;
@@ -71,5 +72,16 @@ public class ProcessorController {
         }
 
         return objectMapper.readValue(payload, Map.class);
+    }
+
+    /** POST /api/process/{id}/evidence — attach evidence hash + IPFS URI */
+    @PostMapping("/{id}/evidence")
+    @PreAuthorize("hasRole('PROCESSOR')")
+    public ResponseEntity<?> addEvidence(@AuthenticationPrincipal String userId,
+                                         @PathVariable String id,
+                                         @Valid @RequestBody AddEvidenceRequest req) throws Exception {
+        byte[] result = fabricGateway.submitAs(userId, "addEvidence",
+                id, req.getEvidenceHash(), req.getEvidenceUri());
+        return ResponseEntity.ok(objectMapper.readValue(result, Map.class));
     }
 }

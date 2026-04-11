@@ -32,6 +32,7 @@ export default function ProcessorDashboardPage() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [form, setForm] = useState<CreateProcessedInput>(INITIAL_FORM);
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [processed, setProcessed] = useState<BatchResponse[]>([]);
   const [harvestParents, setHarvestParents] = useState<BatchResponse[]>([]);
 
@@ -63,12 +64,19 @@ export default function ProcessorDashboardPage() {
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
+    if (!evidenceFile) {
+      setError('Vui lòng chọn ảnh minh chứng trước khi tạo Processed batch.');
+      return;
+    }
     setSubmitting(true);
     setError('');
     setMessage('');
     try {
-      await dashboardApi.createProcessed(form);
+      const created = await dashboardApi.createProcessed(form);
+      const evidence = await dashboardApi.uploadEvidence(evidenceFile);
+      await dashboardApi.addProcessedEvidence(created.batchId, evidence);
       setForm((p) => ({ ...INITIAL_FORM, parentBatchId: p.parentBatchId }));
+      setEvidenceFile(null);
       setMessage('Tạo Processed batch thành công.');
       await refresh();
     } catch (e) {
@@ -95,8 +103,8 @@ export default function ProcessorDashboardPage() {
   return (
     <DashboardShell title="Processor Dashboard" subtitle="Tạo Processed batch từ Harvest đã hoàn thành">
       <div className="grid gap-6 xl:grid-cols-[380px,1fr]">
-        <section className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-rose-900">Tạo Processed batch</h2>
+        <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
+          <h2 className="text-base font-semibold text-amber-900">Tạo Processed batch</h2>
           <form onSubmit={handleCreate} className="mt-4 space-y-3">
             <label className="block text-sm">
               <span className="mb-1 block font-medium text-slate-700">Harvest nguồn</span>
@@ -104,7 +112,7 @@ export default function ProcessorDashboardPage() {
                 value={form.parentBatchId}
                 onChange={(e) => setForm((p) => ({ ...p, parentBatchId: e.target.value }))}
                 required
-                className="w-full rounded-lg border border-rose-200 px-3 py-2 outline-none ring-rose-400 focus:ring"
+                className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
               >
                 {harvestParents.length === 0 && <option value="">Không có parent hợp lệ</option>}
                 {harvestParents.map((item) => (
@@ -119,7 +127,7 @@ export default function ProcessorDashboardPage() {
               <select
                 value={form.processingMethod}
                 onChange={(e) => setForm((p) => ({ ...p, processingMethod: e.target.value }))}
-                className="w-full rounded-lg border border-rose-200 px-3 py-2 outline-none ring-rose-400 focus:ring"
+                className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
               >
                 {METHODS.map((method) => <option key={method} value={method}>{method}</option>)}
               </select>
@@ -131,7 +139,7 @@ export default function ProcessorDashboardPage() {
                 value={form.startDate}
                 onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))}
                 required
-                className="w-full rounded-lg border border-rose-200 px-3 py-2 outline-none ring-rose-400 focus:ring"
+                className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
               />
             </label>
             <label className="block text-sm">
@@ -141,7 +149,7 @@ export default function ProcessorDashboardPage() {
                 value={form.endDate}
                 onChange={(e) => setForm((p) => ({ ...p, endDate: e.target.value }))}
                 required
-                className="w-full rounded-lg border border-rose-200 px-3 py-2 outline-none ring-rose-400 focus:ring"
+                className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
               />
             </label>
             <label className="block text-sm">
@@ -150,7 +158,7 @@ export default function ProcessorDashboardPage() {
                 value={form.facilityName}
                 onChange={(e) => setForm((p) => ({ ...p, facilityName: e.target.value }))}
                 required
-                className="w-full rounded-lg border border-rose-200 px-3 py-2 outline-none ring-rose-400 focus:ring"
+                className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
               />
             </label>
             <label className="block text-sm">
@@ -162,27 +170,45 @@ export default function ProcessorDashboardPage() {
                 value={form.weightKg}
                 onChange={(e) => setForm((p) => ({ ...p, weightKg: e.target.value }))}
                 required
-                className="w-full rounded-lg border border-rose-200 px-3 py-2 outline-none ring-rose-400 focus:ring"
+                className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
               />
             </label>
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium text-slate-700">Ảnh minh chứng</span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setEvidenceFile(e.target.files?.[0] ?? null)}
+                required
+                className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
+              />
+            </label>
+            {evidenceFile && <p className="text-xs text-slate-500">Đã chọn: {evidenceFile.name}</p>}
             <button
               type="submit"
               disabled={submitting || harvestParents.length === 0}
-              className="w-full rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800 disabled:opacity-50"
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
             >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4" aria-hidden="true">
+                <path d="M5 12h14M12 5v14" />
+              </svg>
               {submitting ? 'Đang tạo...' : 'Tạo Processed batch'}
             </button>
           </form>
         </section>
 
-        <section className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
+        <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-rose-900">Danh sách Processed</h2>
+            <h2 className="text-base font-semibold text-amber-900">Danh sách Processed</h2>
             <button
               type="button"
               onClick={() => void refresh()}
-              className="rounded-lg border border-rose-200 px-3 py-1.5 text-sm text-rose-700 hover:bg-rose-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 px-3 py-1.5 text-sm text-amber-700 hover:bg-amber-50"
             >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4" aria-hidden="true">
+                <path d="M20 12a8 8 0 1 1-2.3-5.7" />
+                <path d="M20 5v4h-4" />
+              </svg>
               Làm mới
             </button>
           </div>
@@ -195,7 +221,7 @@ export default function ProcessorDashboardPage() {
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
-                  <tr className="border-b border-rose-100 text-left text-slate-500">
+                  <tr className="border-b border-amber-100 text-left text-slate-500">
                     <th className="px-2 py-2 font-medium">Mã công khai</th>
                     <th className="px-2 py-2 font-medium">Trạng thái</th>
                     <th className="px-2 py-2 font-medium">Cập nhật</th>
@@ -204,7 +230,7 @@ export default function ProcessorDashboardPage() {
                 </thead>
                 <tbody>
                   {processed.map((item) => (
-                    <tr key={item.batchId} className="border-b border-rose-50">
+                    <tr key={item.batchId} className="border-b border-amber-50">
                       <td className="px-2 py-2 font-mono text-xs text-slate-700">{item.publicCode}</td>
                       <td className="px-2 py-2"><StatusBadge status={item.status} /></td>
                       <td className="px-2 py-2 text-slate-600">{new Date(item.updatedAt).toLocaleString('vi-VN')}</td>
@@ -214,8 +240,11 @@ export default function ProcessorDashboardPage() {
                             <button
                               type="button"
                               onClick={() => void updateStatus(item.batchId, 'IN_PROCESS')}
-                              className="rounded-md bg-rose-100 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-200"
+                              className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-200"
                             >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-3.5 w-3.5" aria-hidden="true">
+                                <path d="M12 3v4M12 17v4M3 12h4M17 12h4" />
+                              </svg>
                               IN_PROCESS
                             </button>
                           )}
@@ -223,8 +252,11 @@ export default function ProcessorDashboardPage() {
                             <button
                               type="button"
                               onClick={() => void updateStatus(item.batchId, 'COMPLETED')}
-                              className="rounded-md bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-200"
+                              className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-200"
                             >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-3.5 w-3.5" aria-hidden="true">
+                                <path d="M5 12l4 4 10-10" />
+                              </svg>
                               COMPLETED
                             </button>
                           )}

@@ -146,6 +146,11 @@ export interface AddEvidenceInput {
   evidenceUri: string;
 }
 
+export interface UploadedEvidence {
+  evidenceHash: string;
+  evidenceUri: string;
+}
+
 export interface RecordFarmActivityInput {
   activityType: string;
   activityDate: string;
@@ -198,6 +203,11 @@ async function updateHarvestStatus(batchId: string, newStatus: BatchStatus): Pro
   return normalizeBatch(res.data);
 }
 
+async function addHarvestEvidence(batchId: string, input: AddEvidenceInput): Promise<BatchResponse> {
+  const res = await apiClient.post<unknown>(`/api/harvest/${encodeURIComponent(batchId)}/evidence`, input);
+  return normalizeBatch(res.data);
+}
+
 async function createProcessed(input: CreateProcessedInput): Promise<BatchResponse> {
   const res = await apiClient.post<unknown>('/api/process', input);
   return normalizeBatch(res.data);
@@ -221,6 +231,30 @@ async function updateRoastStatus(batchId: string, newStatus: BatchStatus): Promi
 async function addEvidence(batchId: string, input: AddEvidenceInput): Promise<BatchResponse> {
   const res = await apiClient.post<unknown>(`/api/roast/${encodeURIComponent(batchId)}/evidence`, input);
   return normalizeBatch(res.data);
+}
+
+async function addProcessedEvidence(batchId: string, input: AddEvidenceInput): Promise<BatchResponse> {
+  const res = await apiClient.post<unknown>(`/api/process/${encodeURIComponent(batchId)}/evidence`, input);
+  return normalizeBatch(res.data);
+}
+
+async function addPackagedEvidence(batchId: string, input: AddEvidenceInput): Promise<BatchResponse> {
+  const res = await apiClient.post<unknown>(`/api/package/${encodeURIComponent(batchId)}/evidence`, input);
+  return normalizeBatch(res.data);
+}
+
+async function uploadEvidence(file: File): Promise<UploadedEvidence> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await apiClient.post<UploadedEvidence>('/api/evidence/upload', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return {
+    evidenceHash: asString(res.data?.evidenceHash),
+    evidenceUri: asString(res.data?.evidenceUri),
+  };
 }
 
 async function requestTransfer(batchId: string): Promise<BatchResponse> {
@@ -258,11 +292,15 @@ export const dashboardApi = {
   createHarvest,
   recordFarmActivity,
   updateHarvestStatus,
+  addHarvestEvidence,
   createProcessed,
   updateProcessedStatus,
   createRoast,
   updateRoastStatus,
   addEvidence,
+  addProcessedEvidence,
+  addPackagedEvidence,
+  uploadEvidence,
   requestTransfer,
   acceptTransfer,
   createPackaged,
