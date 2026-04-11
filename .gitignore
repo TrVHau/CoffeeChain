@@ -76,7 +76,6 @@ frontend/build/
 frontend/.env.local
 
 # Generated API client (regenerate từ openapi.yaml)
-frontend/src/lib/api/generated/
 
 # ──────────────────────────────────────────────────────────
 # LOGS

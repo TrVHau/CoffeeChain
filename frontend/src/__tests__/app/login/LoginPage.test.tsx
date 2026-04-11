@@ -78,7 +78,7 @@ describe('LoginPage', () => {
     expect(JSON.parse(options.body)).toMatchObject({ userId: 'farmer_alice', password: 'pw123' });
   });
 
-  it('submit thành công → redirect sang /dashboard/farmer', async () => {
+  it('submit thành công → redirect sang /dashboard', async () => {
     const user = userEvent.setup();
     renderLogin();
 
@@ -86,10 +86,10 @@ describe('LoginPage', () => {
     await user.type(screen.getByLabelText(/Mật khẩu/i), 'pw123');
     await user.click(screen.getByRole('button', { name: /Đăng nhập/i }));
 
-    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/dashboard/farmer'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/dashboard'));
   });
 
-  it('submit với role PACKAGER → redirect /dashboard/packager', async () => {
+  it('submit với role PACKAGER → vẫn redirect /dashboard', async () => {
     (global.fetch as jest.Mock).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ token: 'jwt-pack', role: 'PACKAGER' }),
@@ -102,7 +102,7 @@ describe('LoginPage', () => {
     await user.type(screen.getByLabelText(/Mật khẩu/i), 'pw123');
     await user.click(screen.getByRole('button', { name: /Đăng nhập/i }));
 
-    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/dashboard/packager'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/dashboard'));
   });
 
   // ── Error handling ──────────────────────────────────────────────────────────
