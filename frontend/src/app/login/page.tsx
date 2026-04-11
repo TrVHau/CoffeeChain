@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth/useAuth';
-import { ROLE_DASHBOARD, type UserRole } from '@/lib/auth/AuthContext';
+import { type UserRole } from '@/lib/auth/AuthContext';
 
 interface LoginResponse {
   token: string;
@@ -25,7 +25,7 @@ function LoginForm() {
   useEffect(() => {
     if (isAuthenticated && user) {
       const redirectTo = searchParams.get('redirectTo');
-      router.replace(redirectTo ?? ROLE_DASHBOARD[user.role]);
+      router.replace(redirectTo ?? '/dashboard');
     }
   }, [isAuthenticated, user, router, searchParams]);
 
@@ -54,7 +54,7 @@ function LoginForm() {
       login(userId, data.token, data.role);
 
       const redirectTo = searchParams.get('redirectTo');
-      router.push(redirectTo ?? ROLE_DASHBOARD[data.role]);
+      router.push(redirectTo ?? '/dashboard');
     } catch {
       setError('Không thể kết nối máy chủ. Vui lòng thử lại.');
     } finally {
