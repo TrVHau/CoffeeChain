@@ -1,15 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DashboardShell } from '@/components/dashboard/DashboardShell';
 import { EmptyState, ErrorState, LoadingState } from '@/components/dashboard/UiState';
 import { StatusBadge } from '@/components/dashboard/StatusBadge';
-import {
-  dashboardApi,
-  getApiErrorMessage,
-  type AddEvidenceInput,
-  type CreateRoastInput,
-} from '@/lib/api/dashboardApi';
+import { dashboardApi, getApiErrorMessage, type CreateRoastInput } from '@/lib/api/dashboardApi';
 import type { BatchResponse, BatchStatus } from '@/lib/api/types';
 import { useRoleGuard } from '@/lib/auth/useRoleGuard';
 
@@ -19,11 +14,6 @@ const INITIAL_CREATE: CreateRoastInput = {
   roastDate: '',
   roastDurationMinutes: '',
   weightKg: '',
-};
-
-const INITIAL_EVIDENCE: AddEvidenceInput = {
-  evidenceHash: '',
-  evidenceUri: '',
 };
 
 const ROAST_PROFILES = ['Light', 'Medium-Light', 'Medium', 'Dark'] as const;
@@ -41,10 +31,8 @@ export default function RoasterDashboardPage() {
   const [message, setMessage] = useState('');
 
   const [createForm, setCreateForm] = useState<CreateRoastInput>(INITIAL_CREATE);
-  const [evidenceForm, setEvidenceForm] = useState<AddEvidenceInput>(INITIAL_EVIDENCE);
-  const [selectedRoastId, setSelectedRoastId] = useState('');
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [submittingCreate, setSubmittingCreate] = useState(false);
-  const [submittingEvidence, setSubmittingEvidence] = useState(false);
 
   const [parents, setParents] = useState<BatchResponse[]>([]);
   const [roasts, setRoasts] = useState<BatchResponse[]>([]);
@@ -60,7 +48,6 @@ export default function RoasterDashboardPage() {
       setParents(parentList);
       setRoasts(roastList);
       setCreateForm((p) => ({ ...p, parentBatchId: p.parentBatchId || parentList[0]?.batchId || '' }));
-      setSelectedRoastId((prev) => prev || roastList[0]?.batchId || '');
     } catch (e) {
       setError(getApiErrorMessage(e));
     } finally {
@@ -75,36 +62,25 @@ export default function RoasterDashboardPage() {
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
+    if (!evidenceFile) {
+      setError('Vui lòng chọn ảnh minh chứng trước khi tạo Roast batch.');
+      return;
+    }
     setSubmittingCreate(true);
     setError('');
     setMessage('');
     try {
-      await dashboardApi.createRoast(createForm);
+      const created = await dashboardApi.createRoast(createForm);
+      const evidence = await dashboardApi.uploadEvidence(evidenceFile);
+      await dashboardApi.addEvidence(created.batchId, evidence);
       setCreateForm((p) => ({ ...INITIAL_CREATE, parentBatchId: p.parentBatchId, roastProfile: p.roastProfile }));
+      setEvidenceFile(null);
       setMessage('Tạo Roast batch thành công.');
       await refresh();
     } catch (e) {
       setError(getApiErrorMessage(e));
     } finally {
       setSubmittingCreate(false);
-    }
-  }
-
-  async function handleAddEvidence(e: React.FormEvent) {
-    e.preventDefault();
-    if (!selectedRoastId) return;
-    setSubmittingEvidence(true);
-    setError('');
-    setMessage('');
-    try {
-      await dashboardApi.addEvidence(selectedRoastId, evidenceForm);
-      setEvidenceForm(INITIAL_EVIDENCE);
-      setMessage('Đã cập nhật minh chứng.');
-      await refresh();
-    } catch (e) {
-      setError(getApiErrorMessage(e));
-    } finally {
-      setSubmittingEvidence(false);
     }
   }
 
@@ -132,19 +108,14 @@ export default function RoasterDashboardPage() {
     }
   }
 
-  const selectedRoast = useMemo(
-    () => roasts.find((item) => item.batchId === selectedRoastId) ?? null,
-    [roasts, selectedRoastId]
-  );
-
   if (!ready) return <LoadingState text="Đang xác thực quyền truy cập..." />;
 
   return (
     <DashboardShell title="Roaster Dashboard" subtitle="Tạo Roast, gắn minh chứng và chuyển giao">
       <div className="grid gap-6 xl:grid-cols-[420px,1fr]">
         <div className="space-y-6">
-          <section className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
-            <h2 className="text-base font-semibold text-rose-900">Tạo Roast batch</h2>
+          <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
+            <h2 className="text-base font-semibold text-amber-900">Tạo Roast batch</h2>
             <form onSubmit={handleCreate} className="mt-4 space-y-3">
               <label className="block text-sm">
                 <span className="mb-1 block font-medium text-slate-700">Processed nguồn</span>
@@ -152,7 +123,7 @@ export default function RoasterDashboardPage() {
                   value={createForm.parentBatchId}
                   onChange={(e) => setCreateForm((p) => ({ ...p, parentBatchId: e.target.value }))}
                   required
-                  className="w-full rounded-lg border border-rose-200 px-3 py-2 outline-none ring-rose-400 focus:ring"
+                  className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
                 >
                   {parents.length === 0 && <option value="">Không có parent hợp lệ</option>}
                   {parents.map((item) => (
@@ -167,7 +138,7 @@ export default function RoasterDashboardPage() {
                 <select
                   value={createForm.roastProfile}
                   onChange={(e) => setCreateForm((p) => ({ ...p, roastProfile: e.target.value }))}
-                  className="w-full rounded-lg border border-rose-200 px-3 py-2 outline-none ring-rose-400 focus:ring"
+                  className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
                 >
                   {ROAST_PROFILES.map((profile) => <option key={profile} value={profile}>{profile}</option>)}
                 </select>
@@ -179,7 +150,7 @@ export default function RoasterDashboardPage() {
                   value={createForm.roastDate}
                   onChange={(e) => setCreateForm((p) => ({ ...p, roastDate: e.target.value }))}
                   required
-                  className="w-full rounded-lg border border-rose-200 px-3 py-2 outline-none ring-rose-400 focus:ring"
+                  className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
                 />
               </label>
               <label className="block text-sm">
@@ -190,7 +161,7 @@ export default function RoasterDashboardPage() {
                   value={createForm.roastDurationMinutes}
                   onChange={(e) => setCreateForm((p) => ({ ...p, roastDurationMinutes: e.target.value }))}
                   required
-                  className="w-full rounded-lg border border-rose-200 px-3 py-2 outline-none ring-rose-400 focus:ring"
+                  className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
                 />
               </label>
               <label className="block text-sm">
@@ -202,79 +173,40 @@ export default function RoasterDashboardPage() {
                   value={createForm.weightKg}
                   onChange={(e) => setCreateForm((p) => ({ ...p, weightKg: e.target.value }))}
                   required
-                  className="w-full rounded-lg border border-rose-200 px-3 py-2 outline-none ring-rose-400 focus:ring"
+                  className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
                 />
               </label>
+              <label className="block text-sm">
+                <span className="mb-1 block font-medium text-slate-700">Ảnh minh chứng</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setEvidenceFile(e.target.files?.[0] ?? null)}
+                  required
+                  className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
+                />
+              </label>
+              {evidenceFile && (
+                <p className="text-xs text-slate-500">Đã chọn: {evidenceFile.name}</p>
+              )}
               <button
                 type="submit"
                 disabled={submittingCreate || parents.length === 0}
-                className="w-full rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800 disabled:opacity-50"
+                className="w-full rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
               >
                 {submittingCreate ? 'Đang tạo...' : 'Tạo Roast batch'}
               </button>
             </form>
           </section>
-
-          <section className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
-            <h2 className="text-base font-semibold text-rose-900">Thêm minh chứng</h2>
-            <form onSubmit={handleAddEvidence} className="mt-4 space-y-3">
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Roast batch</span>
-                <select
-                  value={selectedRoastId}
-                  onChange={(e) => setSelectedRoastId(e.target.value)}
-                  className="w-full rounded-lg border border-rose-200 px-3 py-2 outline-none ring-rose-400 focus:ring"
-                >
-                  {roasts.length === 0 && <option value="">Không có Roast batch</option>}
-                  {roasts.map((item) => (
-                    <option key={item.batchId} value={item.batchId}>
-                      {item.publicCode} - {item.status}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Mã băm minh chứng (SHA-256)</span>
-                <input
-                  value={evidenceForm.evidenceHash}
-                  onChange={(e) => setEvidenceForm((p) => ({ ...p, evidenceHash: e.target.value }))}
-                  required
-                  className="w-full rounded-lg border border-rose-200 px-3 py-2 outline-none ring-rose-400 focus:ring"
-                />
-              </label>
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">URI minh chứng</span>
-                <input
-                  value={evidenceForm.evidenceUri}
-                  onChange={(e) => setEvidenceForm((p) => ({ ...p, evidenceUri: e.target.value }))}
-                  required
-                  className="w-full rounded-lg border border-rose-200 px-3 py-2 outline-none ring-rose-400 focus:ring"
-                  placeholder="ipfs://..."
-                />
-              </label>
-              <button
-                type="submit"
-                disabled={submittingEvidence || !selectedRoastId}
-                className="w-full rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800 disabled:opacity-50"
-              >
-                {submittingEvidence ? 'Đang cập nhật...' : 'Lưu minh chứng'}
-              </button>
-              {selectedRoast && (
-                <p className="text-xs text-slate-500">
-                  Batch được chọn: {selectedRoast.publicCode} ({selectedRoast.status})
-                </p>
-              )}
-            </form>
-          </section>
         </div>
 
-        <section className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
+        <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-rose-900">Danh sách Roast</h2>
+            <h2 className="text-base font-semibold text-amber-900">Danh sách Roast</h2>
             <button
               type="button"
               onClick={() => void refresh()}
-              className="rounded-lg border border-rose-200 px-3 py-1.5 text-sm text-rose-700 hover:bg-rose-50"
+              className="rounded-lg border border-amber-200 px-3 py-1.5 text-sm text-amber-700 hover:bg-amber-50"
             >
               Làm mới
             </button>
@@ -288,7 +220,7 @@ export default function RoasterDashboardPage() {
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
-                  <tr className="border-b border-rose-100 text-left text-slate-500">
+                  <tr className="border-b border-amber-100 text-left text-slate-500">
                     <th className="px-2 py-2 font-medium">Mã công khai</th>
                     <th className="px-2 py-2 font-medium">Trạng thái</th>
                     <th className="px-2 py-2 font-medium">Minh chứng</th>
@@ -297,7 +229,7 @@ export default function RoasterDashboardPage() {
                 </thead>
                 <tbody>
                   {roasts.map((item) => (
-                    <tr key={item.batchId} className="border-b border-rose-50">
+                    <tr key={item.batchId} className="border-b border-amber-50">
                       <td className="px-2 py-2 font-mono text-xs text-slate-700">{item.publicCode}</td>
                       <td className="px-2 py-2"><StatusBadge status={item.status} /></td>
                       <td className="px-2 py-2 text-xs text-slate-600">
@@ -309,7 +241,7 @@ export default function RoasterDashboardPage() {
                             <button
                               type="button"
                               onClick={() => void updateStatus(item.batchId, 'IN_PROCESS')}
-                              className="rounded-md bg-rose-100 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-200"
+                              className="rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-200"
                             >
                               IN_PROCESS
                             </button>

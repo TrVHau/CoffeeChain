@@ -57,17 +57,33 @@ export default function RetailerDashboardPage() {
     }
   }
 
+  async function downloadQr(batchId: string) {
+    setError('');
+    try {
+      const url = await dashboardApi.getPackagedQrUrl(batchId);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${batchId}.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      setError(getApiErrorMessage(e));
+    }
+  }
+
   if (!ready) return <LoadingState text="Đang xác thực quyền truy cập..." />;
 
   return (
     <DashboardShell title="Retailer Dashboard" subtitle="Quản lý tồn kho và trạng thái bán lẻ">
-      <section className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
+      <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-rose-900">Danh sách Packaged</h2>
+          <h2 className="text-base font-semibold text-stone-900">Danh sách Packaged</h2>
           <button
             type="button"
             onClick={() => void refresh()}
-            className="rounded-lg border border-rose-200 px-3 py-1.5 text-sm text-rose-700 hover:bg-rose-50"
+            className="rounded-lg border border-amber-200 px-3 py-1.5 text-sm text-amber-800 hover:bg-amber-50"
           >
             Làm mới
           </button>
@@ -81,19 +97,29 @@ export default function RetailerDashboardPage() {
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
-                <tr className="border-b border-rose-100 text-left text-slate-500">
+                <tr className="border-b border-amber-100 text-left text-slate-500">
                   <th className="px-2 py-2 font-medium">Mã công khai</th>
                   <th className="px-2 py-2 font-medium">Trạng thái</th>
                   <th className="px-2 py-2 font-medium">Chủ sở hữu</th>
+                  <th className="px-2 py-2 font-medium">QR</th>
                   <th className="px-2 py-2 font-medium">Thao tác</th>
                 </tr>
               </thead>
               <tbody>
                 {packaged.map((item) => (
-                  <tr key={item.batchId} className="border-b border-rose-50">
+                  <tr key={item.batchId} className="border-b border-amber-50">
                     <td className="px-2 py-2 font-mono text-xs text-slate-700">{item.publicCode}</td>
                     <td className="px-2 py-2"><StatusBadge status={item.status} /></td>
                     <td className="px-2 py-2 text-slate-600">{item.ownerMsp}</td>
+                    <td className="px-2 py-2">
+                      <button
+                        type="button"
+                        onClick={() => void downloadQr(item.batchId)}
+                        className="rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-200"
+                      >
+                        Tải QR
+                      </button>
+                    </td>
                     <td className="px-2 py-2">
                       <div className="flex flex-wrap gap-2">
                         {item.status === 'TRANSFERRED' && (
@@ -109,7 +135,7 @@ export default function RetailerDashboardPage() {
                           <button
                             type="button"
                             onClick={() => void updateToSold(item.batchId)}
-                            className="rounded-md bg-rose-100 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-200"
+                            className="rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-200"
                           >
                             SOLD
                           </button>

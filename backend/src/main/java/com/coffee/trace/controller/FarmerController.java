@@ -1,5 +1,6 @@
 package com.coffee.trace.controller;
 
+import com.coffee.trace.dto.request.AddEvidenceRequest;
 import com.coffee.trace.dto.request.CreateHarvestBatchRequest;
 import com.coffee.trace.dto.request.RecordFarmActivityRequest;
 import com.coffee.trace.dto.request.UpdateStatusRequest;
@@ -61,6 +62,17 @@ public class FarmerController {
                 req.getNote() != null ? req.getNote() : "",
                 req.getEvidenceHash() != null ? req.getEvidenceHash() : "",
                 req.getEvidenceUri() != null ? req.getEvidenceUri() : "");
+        return ResponseEntity.ok(objectMapper.readValue(result, Map.class));
+    }
+
+    /** POST /api/harvest/{id}/evidence — attach evidence hash + IPFS URI */
+    @PostMapping("/{id}/evidence")
+    @PreAuthorize("hasRole('FARMER')")
+    public ResponseEntity<?> addEvidence(@AuthenticationPrincipal String userId,
+                                         @PathVariable String id,
+                                         @Valid @RequestBody AddEvidenceRequest req) throws Exception {
+        byte[] result = fabricGateway.submitAs(userId, "addEvidence",
+                id, req.getEvidenceHash(), req.getEvidenceUri());
         return ResponseEntity.ok(objectMapper.readValue(result, Map.class));
     }
 

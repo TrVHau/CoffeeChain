@@ -166,12 +166,15 @@ export function TraceTimeline({ batches, farmActivities, ledgerRefs }: TraceTime
                 </dl>
               )}
 
-              {batch.type === 'ROAST' && batch.evidenceHash && (
-                <EvidenceVerifier
-                  batchId={batch.batchId}
-                  onChainHash={batch.evidenceHash}
-                  evidenceUri={batch.evidenceUri ?? undefined}
-                />
+              {batch.evidenceHash && (
+                <div className="mt-2">
+                  <p className="text-xs font-medium text-slate-500">Minh chứng công đoạn</p>
+                  <EvidenceVerifier
+                    batchId={batch.batchId}
+                    onChainHash={batch.evidenceHash}
+                    evidenceUri={batch.evidenceUri ?? undefined}
+                  />
+                </div>
               )}
 
               {batch.type === 'HARVEST' && <FarmActivityLog activities={farmActivities} />}
