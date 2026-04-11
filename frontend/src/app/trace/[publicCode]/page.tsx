@@ -1,8 +1,8 @@
 ﻿'use client';
 
 import { useEffect, useState } from 'react';
-import { AxiosError } from 'axios';
-import { apiClient } from '@/lib/api/client';
+import { ApiError, TraceService } from '@/lib/api/generated';
+import { OpenAPI } from '@/lib/api/generated/core/OpenAPI';
 import type { TraceResponse, BatchResponse } from '@/lib/api/types';
 import { TraceTimeline } from '@/components/TraceTimeline';
 
@@ -52,29 +52,35 @@ export default function TracePage({ params }: { params: { publicCode: string } }
 
   useEffect(() => {
     let cancelled = false;
+    const previousBase = OpenAPI.BASE;
+    OpenAPI.BASE = typeof window === 'undefined' ? '' : window.location.origin;
 
-    async function fetchTrace() {
-      setLoading(true);
-      setNotFound(false);
-      setError('');
-      try {
-        const res = await apiClient.get<TraceResponse>(`/api/trace/${encodeURIComponent(publicCode)}`);
-        if (!cancelled) setData(res.data);
-      } catch (err) {
+    setLoading(true);
+    setNotFound(false);
+    setError('');
+
+    const request = TraceService.getApiTrace(publicCode);
+
+    request
+      .then((response) => {
+        if (!cancelled) setData(response);
+      })
+      .catch((err: unknown) => {
         if (cancelled) return;
-        if (err instanceof AxiosError && err.response?.status === 404) {
+        if (err instanceof ApiError && err.status === 404) {
           setNotFound(true);
         } else {
           setError(err instanceof Error ? err.message : 'Không thể tải dữ liệu truy xuất.');
         }
-      } finally {
+      })
+      .finally(() => {
         if (!cancelled) setLoading(false);
-      }
-    }
+      });
 
-    void fetchTrace();
     return () => {
       cancelled = true;
+      request.cancel();
+      OpenAPI.BASE = previousBase;
     };
   }, [publicCode]);
 
