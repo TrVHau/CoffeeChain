@@ -55,17 +55,6 @@ export default function TracePage({ params }: { params: { publicCode: string } }
     const previousBase = OpenAPI.BASE;
     OpenAPI.BASE = typeof window === 'undefined' ? '' : window.location.origin;
 
-    setLoading(true);
-    setNotFound(false);
-    setError('');
-
-    const request = TraceService.getApiTrace(publicCode);
-
-    request
-      .then((response) => {
-        if (!cancelled) setData(response);
-      })
-      .catch((err: unknown) => {
     const traceRequest = TraceService.getApiTrace(publicCode);
     void (async () => {
       try {
@@ -74,7 +63,10 @@ export default function TracePage({ params }: { params: { publicCode: string } }
         setError('');
         setData(null);
         const trace = await traceRequest;
-        if (!cancelled) setData(trace);
+        if (!trace.batch) {
+          throw new Error('Dữ liệu truy xuất không hợp lệ.');
+        }
+        if (!cancelled) setData(trace as TraceResponse);
       } catch (err) {
         if (cancelled) return;
         if (err instanceof ApiError && err.status === 404) {
@@ -82,20 +74,15 @@ export default function TracePage({ params }: { params: { publicCode: string } }
         } else {
           setError(err instanceof Error ? err.message : 'Không thể tải dữ liệu truy xuất.');
         }
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
-      request.cancel();
-      OpenAPI.BASE = previousBase;
-      }
-    })();
-    return () => {
-      cancelled = true;
       traceRequest.cancel();
+      OpenAPI.BASE = previousBase;
     };
   }, [publicCode]);
 

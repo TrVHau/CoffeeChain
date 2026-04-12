@@ -176,7 +176,7 @@ export default function RetailerDashboardPage() {
             </div>
 
             <div className="hidden w-full max-w-full overflow-x-auto md:block">
-              <table className="min-w-[820px] text-sm">
+              <table className="w-full min-w-full text-sm">
                 <thead>
                   <tr className="border-b border-amber-100 text-left text-slate-500">
                     <th className="px-2 py-2 font-medium">Mã công khai</th>
