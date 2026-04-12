@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { ApiError, TraceService } from '@/lib/api/generated';
+import { OpenAPI } from '@/lib/api/generated/core/OpenAPI';
 import type { TraceResponse, BatchResponse } from '@/lib/api/types';
 import { TraceTimeline } from '@/components/TraceTimeline';
 
@@ -51,6 +52,20 @@ export default function TracePage({ params }: { params: { publicCode: string } }
 
   useEffect(() => {
     let cancelled = false;
+    const previousBase = OpenAPI.BASE;
+    OpenAPI.BASE = typeof window === 'undefined' ? '' : window.location.origin;
+
+    setLoading(true);
+    setNotFound(false);
+    setError('');
+
+    const request = TraceService.getApiTrace(publicCode);
+
+    request
+      .then((response) => {
+        if (!cancelled) setData(response);
+      })
+      .catch((err: unknown) => {
     const traceRequest = TraceService.getApiTrace(publicCode);
     void (async () => {
       try {
@@ -67,8 +82,15 @@ export default function TracePage({ params }: { params: { publicCode: string } }
         } else {
           setError(err instanceof Error ? err.message : 'Không thể tải dữ liệu truy xuất.');
         }
-      } finally {
+      })
+      .finally(() => {
         if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      request.cancel();
+      OpenAPI.BASE = previousBase;
       }
     })();
     return () => {
