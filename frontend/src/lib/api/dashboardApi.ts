@@ -1,5 +1,27 @@
 import { AxiosError } from 'axios';
 import { apiClient } from './client';
+import {
+  mockAcceptTransfer,
+  mockAddHarvestEvidence,
+  mockAddPackagedEvidence,
+  mockAddProcessedEvidence,
+  mockAddRoastEvidence,
+  mockCreateHarvest,
+  mockCreatePackaged,
+  mockCreateProcessed,
+  mockCreateRoast,
+  mockGetBatchById,
+  mockGetList,
+  mockGetPackagedQrUrl,
+  mockGetTrace,
+  mockRecordFarmActivity,
+  mockRequestTransfer,
+  mockUpdateHarvestStatus,
+  mockUpdateProcessedStatus,
+  mockUpdateRetailStatus,
+  mockUpdateRoastStatus,
+  mockUploadEvidence,
+} from '@/lib/mock/dashboardMockData';
 import type {
   BatchResponse,
   BatchStatus,
@@ -92,6 +114,16 @@ function normalizeLedgerRef(raw: unknown): LedgerRefItem {
   };
 }
 
+function isOfflineError(error: unknown): boolean {
+  if (error instanceof AxiosError) {
+    return !error.response || error.message === 'Network Error';
+  }
+  if (error instanceof Error) {
+    return /Network Error|fetch failed|Failed to fetch|ECONNREFUSED|ENOTFOUND/i.test(error.message);
+  }
+  return false;
+}
+
 export function getApiErrorMessage(error: unknown): string {
   const axiosError = error as AxiosError<{ message?: string }>;
   if (error instanceof AxiosError || (typeof error === 'object' && error !== null && 'isAxiosError' in error)) {
@@ -160,29 +192,57 @@ export interface RecordFarmActivityInput {
 }
 
 async function getList(filters: BatchListFilters = {}): Promise<BatchResponse[]> {
-  const res = await apiClient.get<unknown[]>('/api/batches', { params: filters });
-  return (res.data ?? []).map(normalizeBatch);
+  try {
+    const res = await apiClient.get<unknown[]>('/api/batches', { params: filters });
+    return (res.data ?? []).map(normalizeBatch);
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockGetList(filters);
+    }
+    throw error;
+  }
 }
 
 async function getBatchById(batchId: string): Promise<BatchResponse> {
-  const res = await apiClient.get<unknown>(`/api/batch/${encodeURIComponent(batchId)}`);
-  return normalizeBatch(res.data);
+  try {
+    const res = await apiClient.get<unknown>(`/api/batch/${encodeURIComponent(batchId)}`);
+    return normalizeBatch(res.data);
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockGetBatchById(batchId);
+    }
+    throw error;
+  }
 }
 
 async function getTrace(publicCode: string): Promise<TraceResponse> {
-  const res = await apiClient.get<unknown>(`/api/trace/${encodeURIComponent(publicCode)}`);
-  const row = (res.data ?? {}) as Record<string, unknown>;
-  return {
-    batch: normalizeBatch(row.batch),
-    parentChain: ((row.parentChain ?? []) as unknown[]).map(normalizeBatch),
-    farmActivities: ((row.farmActivities ?? []) as unknown[]).map(normalizeFarmActivity),
-    ledgerRefs: ((row.ledgerRefs ?? []) as unknown[]).map(normalizeLedgerRef),
-  };
+  try {
+    const res = await apiClient.get<unknown>(`/api/trace/${encodeURIComponent(publicCode)}`);
+    const row = (res.data ?? {}) as Record<string, unknown>;
+    return {
+      batch: normalizeBatch(row.batch),
+      parentChain: ((row.parentChain ?? []) as unknown[]).map(normalizeBatch),
+      farmActivities: ((row.farmActivities ?? []) as unknown[]).map(normalizeFarmActivity),
+      ledgerRefs: ((row.ledgerRefs ?? []) as unknown[]).map(normalizeLedgerRef),
+    };
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockGetTrace(publicCode);
+    }
+    throw error;
+  }
 }
 
 async function createHarvest(input: CreateHarvestInput): Promise<BatchResponse> {
-  const res = await apiClient.post<unknown>('/api/harvest', input);
-  return normalizeBatch(res.data);
+  try {
+    const res = await apiClient.post<unknown>('/api/harvest', input);
+    return normalizeBatch(res.data);
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockCreateHarvest(input);
+    }
+    throw error;
+  }
 }
 
 async function recordFarmActivity(batchId: string, input: RecordFarmActivityInput): Promise<BatchResponse> {
@@ -194,95 +254,207 @@ async function recordFarmActivity(batchId: string, input: RecordFarmActivityInpu
     evidenceHash: input.evidenceHash ?? '',
     evidenceUri: input.evidenceUri ?? '',
   };
-  const res = await apiClient.post<unknown>(`/api/harvest/${encodeURIComponent(batchId)}/activity`, payload);
-  return normalizeBatch(res.data);
+  try {
+    const res = await apiClient.post<unknown>(`/api/harvest/${encodeURIComponent(batchId)}/activity`, payload);
+    return normalizeBatch(res.data);
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockRecordFarmActivity(batchId, input);
+    }
+    throw error;
+  }
 }
 
 async function updateHarvestStatus(batchId: string, newStatus: BatchStatus): Promise<BatchResponse> {
-  const res = await apiClient.patch<unknown>(`/api/harvest/${encodeURIComponent(batchId)}/status`, { newStatus });
-  return normalizeBatch(res.data);
+  try {
+    const res = await apiClient.patch<unknown>(`/api/harvest/${encodeURIComponent(batchId)}/status`, { newStatus });
+    return normalizeBatch(res.data);
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockUpdateHarvestStatus(batchId, newStatus);
+    }
+    throw error;
+  }
 }
 
 async function addHarvestEvidence(batchId: string, input: AddEvidenceInput): Promise<BatchResponse> {
-  const res = await apiClient.post<unknown>(`/api/harvest/${encodeURIComponent(batchId)}/evidence`, input);
-  return normalizeBatch(res.data);
+  try {
+    const res = await apiClient.post<unknown>(`/api/harvest/${encodeURIComponent(batchId)}/evidence`, input);
+    return normalizeBatch(res.data);
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockAddHarvestEvidence(batchId, input);
+    }
+    throw error;
+  }
 }
 
 async function createProcessed(input: CreateProcessedInput): Promise<BatchResponse> {
-  const res = await apiClient.post<unknown>('/api/process', input);
-  return normalizeBatch(res.data);
+  try {
+    const res = await apiClient.post<unknown>('/api/process', input);
+    return normalizeBatch(res.data);
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockCreateProcessed(input);
+    }
+    throw error;
+  }
 }
 
 async function updateProcessedStatus(batchId: string, newStatus: BatchStatus): Promise<BatchResponse> {
-  const res = await apiClient.patch<unknown>(`/api/process/${encodeURIComponent(batchId)}/status`, { newStatus });
-  return normalizeBatch(res.data);
+  try {
+    const res = await apiClient.patch<unknown>(`/api/process/${encodeURIComponent(batchId)}/status`, { newStatus });
+    return normalizeBatch(res.data);
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockUpdateProcessedStatus(batchId, newStatus);
+    }
+    throw error;
+  }
 }
 
 async function createRoast(input: CreateRoastInput): Promise<BatchResponse> {
-  const res = await apiClient.post<unknown>('/api/roast', input);
-  return normalizeBatch(res.data);
+  try {
+    const res = await apiClient.post<unknown>('/api/roast', input);
+    return normalizeBatch(res.data);
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockCreateRoast(input);
+    }
+    throw error;
+  }
 }
 
 async function updateRoastStatus(batchId: string, newStatus: BatchStatus): Promise<BatchResponse> {
-  const res = await apiClient.patch<unknown>(`/api/roast/${encodeURIComponent(batchId)}/status`, { newStatus });
-  return normalizeBatch(res.data);
+  try {
+    const res = await apiClient.patch<unknown>(`/api/roast/${encodeURIComponent(batchId)}/status`, { newStatus });
+    return normalizeBatch(res.data);
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockUpdateRoastStatus(batchId, newStatus);
+    }
+    throw error;
+  }
 }
 
 async function addEvidence(batchId: string, input: AddEvidenceInput): Promise<BatchResponse> {
-  const res = await apiClient.post<unknown>(`/api/roast/${encodeURIComponent(batchId)}/evidence`, input);
-  return normalizeBatch(res.data);
+  try {
+    const res = await apiClient.post<unknown>(`/api/roast/${encodeURIComponent(batchId)}/evidence`, input);
+    return normalizeBatch(res.data);
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockAddRoastEvidence(batchId, input);
+    }
+    throw error;
+  }
 }
 
 async function addProcessedEvidence(batchId: string, input: AddEvidenceInput): Promise<BatchResponse> {
-  const res = await apiClient.post<unknown>(`/api/process/${encodeURIComponent(batchId)}/evidence`, input);
-  return normalizeBatch(res.data);
+  try {
+    const res = await apiClient.post<unknown>(`/api/process/${encodeURIComponent(batchId)}/evidence`, input);
+    return normalizeBatch(res.data);
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockAddProcessedEvidence(batchId, input);
+    }
+    throw error;
+  }
 }
 
 async function addPackagedEvidence(batchId: string, input: AddEvidenceInput): Promise<BatchResponse> {
-  const res = await apiClient.post<unknown>(`/api/package/${encodeURIComponent(batchId)}/evidence`, input);
-  return normalizeBatch(res.data);
+  try {
+    const res = await apiClient.post<unknown>(`/api/package/${encodeURIComponent(batchId)}/evidence`, input);
+    return normalizeBatch(res.data);
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockAddPackagedEvidence(batchId, input);
+    }
+    throw error;
+  }
 }
 
 async function uploadEvidence(file: File): Promise<UploadedEvidence> {
-  const formData = new FormData();
-  formData.append('file', file);
-  const res = await apiClient.post<UploadedEvidence>('/api/evidence/upload', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  });
-  return {
-    evidenceHash: asString(res.data?.evidenceHash),
-    evidenceUri: asString(res.data?.evidenceUri),
-  };
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await apiClient.post<UploadedEvidence>('/api/evidence/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return {
+      evidenceHash: asString(res.data?.evidenceHash),
+      evidenceUri: asString(res.data?.evidenceUri),
+    };
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockUploadEvidence(file);
+    }
+    throw error;
+  }
 }
 
 async function requestTransfer(batchId: string): Promise<BatchResponse> {
-  const res = await apiClient.post<unknown>('/api/transfer/request', { batchId, toMSP: 'Org2MSP' });
-  return normalizeBatch(res.data);
+  try {
+    const res = await apiClient.post<unknown>('/api/transfer/request', { batchId, toMSP: 'Org2MSP' });
+    return normalizeBatch(res.data);
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockRequestTransfer(batchId);
+    }
+    throw error;
+  }
 }
 
 async function acceptTransfer(batchId: string): Promise<BatchResponse> {
-  const res = await apiClient.post<unknown>(`/api/transfer/accept/${encodeURIComponent(batchId)}`);
-  return normalizeBatch(res.data);
+  try {
+    const res = await apiClient.post<unknown>(`/api/transfer/accept/${encodeURIComponent(batchId)}`);
+    return normalizeBatch(res.data);
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockAcceptTransfer(batchId);
+    }
+    throw error;
+  }
 }
 
 async function createPackaged(input: CreatePackagedInput): Promise<BatchResponse> {
-  const res = await apiClient.post<unknown>('/api/package', input);
-  return normalizeBatch(res.data);
+  try {
+    const res = await apiClient.post<unknown>('/api/package', input);
+    return normalizeBatch(res.data);
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockCreatePackaged(input);
+    }
+    throw error;
+  }
 }
 
 async function updateRetailStatus(batchId: string, newStatus: Extract<BatchStatus, 'IN_STOCK' | 'SOLD'>): Promise<BatchResponse> {
-  const res = await apiClient.patch<unknown>(`/api/retail/${encodeURIComponent(batchId)}/status`, { newStatus });
-  return normalizeBatch(res.data);
+  try {
+    const res = await apiClient.patch<unknown>(`/api/retail/${encodeURIComponent(batchId)}/status`, { newStatus });
+    return normalizeBatch(res.data);
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockUpdateRetailStatus(batchId, newStatus);
+    }
+    throw error;
+  }
 }
 
 async function getPackagedQrUrl(batchId: string): Promise<string> {
-  const res = await apiClient.get<ArrayBuffer>(`/api/package/${encodeURIComponent(batchId)}/qr`, {
-    responseType: 'arraybuffer',
-  });
-  const blob = new Blob([res.data], { type: 'image/png' });
-  return URL.createObjectURL(blob);
+  try {
+    const res = await apiClient.get<ArrayBuffer>(`/api/package/${encodeURIComponent(batchId)}/qr`, {
+      responseType: 'arraybuffer',
+    });
+    const blob = new Blob([res.data], { type: 'image/png' });
+    return URL.createObjectURL(blob);
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockGetPackagedQrUrl(batchId);
+    }
+    throw error;
+  }
 }
 
 export const dashboardApi = {

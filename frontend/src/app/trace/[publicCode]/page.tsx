@@ -1,8 +1,7 @@
 ﻿'use client';
 
 import { useEffect, useState } from 'react';
-import { AxiosError } from 'axios';
-import { apiClient } from '@/lib/api/client';
+import { ApiError, TraceService } from '@/lib/api/generated';
 import type { TraceResponse, BatchResponse } from '@/lib/api/types';
 import { TraceTimeline } from '@/components/TraceTimeline';
 
@@ -52,17 +51,18 @@ export default function TracePage({ params }: { params: { publicCode: string } }
 
   useEffect(() => {
     let cancelled = false;
-
-    async function fetchTrace() {
-      setLoading(true);
-      setNotFound(false);
-      setError('');
+    const traceRequest = TraceService.getApiTrace(publicCode);
+    void (async () => {
       try {
-        const res = await apiClient.get<TraceResponse>(`/api/trace/${encodeURIComponent(publicCode)}`);
-        if (!cancelled) setData(res.data);
+        setLoading(true);
+        setNotFound(false);
+        setError('');
+        setData(null);
+        const trace = await traceRequest;
+        if (!cancelled) setData(trace);
       } catch (err) {
         if (cancelled) return;
-        if (err instanceof AxiosError && err.response?.status === 404) {
+        if (err instanceof ApiError && err.status === 404) {
           setNotFound(true);
         } else {
           setError(err instanceof Error ? err.message : 'Không thể tải dữ liệu truy xuất.');
@@ -70,11 +70,10 @@ export default function TracePage({ params }: { params: { publicCode: string } }
       } finally {
         if (!cancelled) setLoading(false);
       }
-    }
-
-    void fetchTrace();
+    })();
     return () => {
       cancelled = true;
+      traceRequest.cancel();
     };
   }, [publicCode]);
 

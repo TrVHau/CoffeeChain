@@ -6,7 +6,7 @@ import { AuthProvider } from '@/lib/auth/AuthContext';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
-const mockPush    = jest.fn();
+const mockPush = jest.fn();
 const mockReplace = jest.fn();
 
 jest.mock('next/navigation', () => ({
@@ -14,16 +14,13 @@ jest.mock('next/navigation', () => ({
   useSearchParams: () => ({ get: (_key: string) => null }),
 }));
 
-// Mock fetch
-global.fetch = jest.fn();
-
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
   return {
-    getItem:    (k: string)         => store[k] ?? null,
-    setItem:    (k: string, v: string) => { store[k] = v; },
-    removeItem: (k: string)         => { delete store[k]; },
-    clear:      ()                  => { store = {}; },
+    getItem: (k: string) => store[k] ?? null,
+    setItem: (k: string, v: string) => { store[k] = v; },
+    removeItem: (k: string) => { delete store[k]; },
+    clear: () => { store = {}; },
   };
 })();
 Object.defineProperty(window, 'localStorage', { value: localStorageMock });
@@ -45,10 +42,6 @@ describe('LoginPage', () => {
     jest.clearAllMocks();
     localStorageMock.clear();
     document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ token: 'jwt-test', role: 'FARMER' }),
-    });
   });
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -63,7 +56,7 @@ describe('LoginPage', () => {
 
   // ── Happy path ──────────────────────────────────────────────────────────────
 
-  it('submit thành công → gọi fetch với userId + password', async () => {
+  it('submit thành công → lưu auth và không gọi fetch', async () => {
     const user = userEvent.setup();
     renderLogin();
 
@@ -71,11 +64,8 @@ describe('LoginPage', () => {
     await user.type(screen.getByLabelText(/Mật khẩu/i), 'pw123');
     await user.click(screen.getByRole('button', { name: /Đăng nhập/i }));
 
-    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
-
-    const [url, options] = (global.fetch as jest.Mock).mock.calls[0];
-    expect(url).toContain('/api/auth/login');
-    expect(JSON.parse(options.body)).toMatchObject({ userId: 'farmer_alice', password: 'pw123' });
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/dashboard'));
+    expect(localStorage.getItem('auth_user')).toContain('farmer_alice');
   });
 
   it('submit thành công → redirect sang /dashboard', async () => {
@@ -90,11 +80,6 @@ describe('LoginPage', () => {
   });
 
   it('submit với role PACKAGER → vẫn redirect /dashboard', async () => {
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ token: 'jwt-pack', role: 'PACKAGER' }),
-    });
-
     const user = userEvent.setup();
     renderLogin();
 
@@ -107,12 +92,7 @@ describe('LoginPage', () => {
 
   // ── Error handling ──────────────────────────────────────────────────────────
 
-  it('API trả 401 → hiển thị error message', async () => {
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
-      ok: false,
-      json: async () => ({ message: 'Sai mật khẩu' }),
-    });
-
+  it('mật khẩu sai → hiển thị error message', async () => {
     const user = userEvent.setup();
     renderLogin();
 
@@ -121,61 +101,22 @@ describe('LoginPage', () => {
     await user.click(screen.getByRole('button', { name: /Đăng nhập/i }));
 
     await waitFor(() =>
-      expect(screen.getByRole('alert')).toHaveTextContent('Sai mật khẩu'),
+      expect(screen.getByRole('alert')).toHaveTextContent(/Mật khẩu không đúng/i),
     );
     expect(mockPush).not.toHaveBeenCalled();
   });
 
-  it('API trả lỗi không có message → fallback message', async () => {
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
-      ok: false,
-      json: async () => ({}),
-    });
-
+  it('user không tồn tại → hiển thị fallback message', async () => {
     const user = userEvent.setup();
     renderLogin();
 
-    await user.type(await screen.findByLabelText(/User ID/i), 'farmer_alice');
+    await user.type(await screen.findByLabelText(/User ID/i), 'unknown_user');
     await user.type(screen.getByLabelText(/Mật khẩu/i), 'pw123');
     await user.click(screen.getByRole('button', { name: /Đăng nhập/i }));
 
     await waitFor(() =>
-      expect(screen.getByRole('alert')).toBeInTheDocument(),
+      expect(screen.getByRole('alert')).toHaveTextContent(/User không tồn tại/i),
     );
-  });
-
-  it('fetch throw (network error) → hiển thị error kết nối', async () => {
-    (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Network error'));
-
-    const user = userEvent.setup();
-    renderLogin();
-
-    await user.type(await screen.findByLabelText(/User ID/i), 'farmer_alice');
-    await user.type(screen.getByLabelText(/Mật khẩu/i), 'pw123');
-    await user.click(screen.getByRole('button', { name: /Đăng nhập/i }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(/Không thể kết nối/i);
-  });
-
-  // ── Loading state ────────────────────────────────────────────────────────────
-
-  it('button hiển thị "Đang đăng nhập..." khi đang fetch', async () => {
-    let resolveFetch!: (val: unknown) => void;
-    (global.fetch as jest.Mock).mockReturnValueOnce(
-      new Promise(res => { resolveFetch = res; }),
-    );
-
-    const user = userEvent.setup();
-    renderLogin();
-
-    await user.type(await screen.findByLabelText(/User ID/i), 'farmer_alice');
-    await user.type(screen.getByLabelText(/Mật khẩu/i), 'pw123');
-    await user.click(screen.getByRole('button', { name: /Đăng nhập/i }));
-
-    expect(await screen.findByRole('button', { name: /Đang đăng nhập/i })).toBeDisabled();
-
-    // Resolve để dọn dẹp
-    resolveFetch({ ok: true, json: async () => ({ token: 't', role: 'FARMER' }) });
   });
 
   // ── Validation ───────────────────────────────────────────────────────────────
@@ -184,6 +125,6 @@ describe('LoginPage', () => {
     renderLogin();
     const btn = await screen.findByRole('button', { name: /Đăng nhập/i });
     fireEvent.click(btn);
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });

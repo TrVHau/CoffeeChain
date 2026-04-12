@@ -60,17 +60,22 @@ function getActivityIcon(type: string): string {
   return ACTIVITY_ICONS[type.toUpperCase()] ?? '📋';
 }
 
+function parseTime(value: string): number {
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
 function formatDate(dateStr: string): string {
   if (!dateStr) return '';
-  try {
-    return new Date(dateStr).toLocaleDateString('vi-VN', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    });
-  } catch {
+  const time = parseTime(dateStr);
+  if (time === 0) {
     return dateStr;
   }
+  return new Date(time).toLocaleDateString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
 }
 
 function findLedgerRef(
@@ -78,12 +83,13 @@ function findLedgerRef(
   eventName: string,
   createdAt: string,
 ): LedgerRefItem | undefined {
-  const target = new Date(createdAt).getTime();
+  const target = parseTime(createdAt);
+  if (target === 0) return undefined;
   const candidates = ledgerRefs.filter((r) => r.eventName === eventName);
   if (candidates.length === 0) return undefined;
   return candidates.reduce((best, cur) => {
-    const bestDiff = Math.abs(new Date(best.createdAt).getTime() - target);
-    const curDiff = Math.abs(new Date(cur.createdAt).getTime() - target);
+    const bestDiff = Math.abs(parseTime(best.createdAt) - target);
+    const curDiff = Math.abs(parseTime(cur.createdAt) - target);
     return curDiff < bestDiff ? cur : best;
   });
 }
@@ -126,7 +132,7 @@ function FarmActivityLog({ activities }: { activities: FarmActivityItem[] }) {
 }
 
 export function TraceTimeline({ batches, farmActivities, ledgerRefs }: TraceTimelineProps) {
-  const steps = [...batches].reverse();
+  const steps = [...batches].sort((left, right) => parseTime(right.createdAt) - parseTime(left.createdAt));
 
   return (
     <div className="relative">

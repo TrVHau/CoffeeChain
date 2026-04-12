@@ -43,6 +43,12 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
   const [form, setForm] = useState<RecordFarmActivityInput>(INITIAL_ACTIVITY);
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
 
+  useEffect(() => {
+    if (!message) return;
+    const timer = window.setTimeout(() => setMessage(''), 3000);
+    return () => window.clearTimeout(timer);
+  }, [message]);
+
   const loadBatch = useCallback(async () => {
     setLoading(true);
     setError('');

@@ -136,8 +136,8 @@ export default function HomePage() {
       const matchesStage = stageFilter === 'ALL' ? true : item.traceStage === stageFilter;
       const matchesKeyword = keyword
         ? item.publicCode.toLowerCase().includes(keyword)
-          || item.title.toLowerCase().includes(keyword)
-          || item.txId.toLowerCase().includes(keyword)
+        || item.title.toLowerCase().includes(keyword)
+        || item.txId.toLowerCase().includes(keyword)
         : true;
 
       return matchesType && matchesStage && matchesKeyword;
@@ -168,14 +168,14 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-amber-50 pb-10">
       <header className="border-b border-amber-200 bg-white">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 md:px-6">
+        <div className="mx-auto flex w-full max-w-6xl flex-col items-start gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between md:px-6">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-amber-700">CoffeeChain Public Trace</p>
             <h1 className="text-xl font-bold text-amber-900 md:text-2xl">☕ Danh sách minh chứng và giao dịch toàn hệ thống</h1>
           </div>
           <Link
             href="/login"
-            className="rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-50"
+            className="w-full rounded-lg border border-amber-300 bg-white px-4 py-2 text-center text-sm font-semibold text-amber-700 transition hover:bg-amber-50 sm:w-auto"
           >
             Login
           </Link>
@@ -298,7 +298,7 @@ export default function HomePage() {
                           onClick={() => router.push(`/trace/${encodeURIComponent(item.publicCode)}`)}
                           className="w-full rounded-lg p-2 text-left transition hover:bg-amber-50"
                         >
-                          <div className="flex items-start justify-between gap-3">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div className="flex gap-2">
                               <span className="mt-0.5 text-lg">{getItemIcon(item)}</span>
                               <div>
@@ -309,7 +309,7 @@ export default function HomePage() {
                                 </p>
                               </div>
                             </div>
-                            <div className="text-right">
+                            <div className="text-left sm:text-right">
                               <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${TYPE_BADGE[item.type]}`}>
                                 {TYPE_LABEL[item.type]}
                               </span>
@@ -328,11 +328,10 @@ export default function HomePage() {
                           key={`evidence-${pageNumber}`}
                           type="button"
                           onClick={() => setEvidencePage(pageNumber)}
-                          className={`rounded-md border px-2.5 py-1 text-xs font-semibold ${
-                            evidencePage === pageNumber
+                          className={`rounded-md border px-2.5 py-1 text-xs font-semibold ${evidencePage === pageNumber
                               ? 'border-amber-600 bg-amber-600 text-white'
                               : 'border-amber-200 bg-white text-amber-700 hover:bg-amber-50'
-                          }`}
+                            }`}
                         >
                           {pageNumber}
                         </button>
@@ -367,7 +366,7 @@ export default function HomePage() {
                           onClick={() => router.push(`/trace/${encodeURIComponent(item.publicCode)}`)}
                           className="w-full rounded-lg p-2 text-left transition hover:bg-amber-50"
                         >
-                          <div className="flex items-start justify-between gap-3">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div className="flex gap-2">
                               <span className="mt-0.5 text-lg">{getItemIcon(item)}</span>
                               <div>
@@ -378,7 +377,7 @@ export default function HomePage() {
                                 </p>
                               </div>
                             </div>
-                            <div className="text-right">
+                            <div className="text-left sm:text-right">
                               <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${TYPE_BADGE[item.type]}`}>
                                 {TYPE_LABEL[item.type]}
                               </span>
@@ -397,11 +396,10 @@ export default function HomePage() {
                           key={`transaction-${pageNumber}`}
                           type="button"
                           onClick={() => setTransactionPage(pageNumber)}
-                          className={`rounded-md border px-2.5 py-1 text-xs font-semibold ${
-                            transactionPage === pageNumber
+                          className={`rounded-md border px-2.5 py-1 text-xs font-semibold ${transactionPage === pageNumber
                               ? 'border-amber-600 bg-amber-600 text-white'
                               : 'border-amber-200 bg-white text-amber-700 hover:bg-amber-50'
-                          }`}
+                            }`}
                         >
                           {pageNumber}
                         </button>

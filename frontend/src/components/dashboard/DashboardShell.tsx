@@ -105,7 +105,7 @@ export function DashboardShell({ title, subtitle, children }: DashboardShellProp
               <h1 className="text-xl font-bold text-stone-900 sm:text-2xl">{title}</h1>
               {subtitle && <p className="text-sm text-slate-600">{subtitle}</p>}
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:gap-3">
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-right text-xs">
                 <p className="flex items-center justify-end gap-1 font-semibold text-amber-900">
                   <UserIcon className="h-3.5 w-3.5" />
@@ -116,7 +116,7 @@ export function DashboardShell({ title, subtitle, children }: DashboardShellProp
               <button
                 type="button"
                 onClick={logout}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-amber-800 px-3 py-2 text-sm font-semibold text-white transition hover:bg-amber-900"
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-amber-800 px-3 py-2 text-sm font-semibold text-white transition hover:bg-amber-900 sm:w-auto"
               >
                 <LogoutIcon className="h-4 w-4" />
                 Đăng xuất

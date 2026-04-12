@@ -1,0 +1,4 @@
+CoffeeChain demo roast proof
+Batch: DEMO-001-R
+Roast profile: Medium Roast
+CreatedAt: 2026-04-02T08:00:00.000Z

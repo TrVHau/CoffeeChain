@@ -1,12 +1,12 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { DashboardShell } from '@/components/dashboard/DashboardShell';
 import { EmptyState, ErrorState, LoadingState } from '@/components/dashboard/UiState';
 import { StatusBadge } from '@/components/dashboard/StatusBadge';
 import { dashboardApi, getApiErrorMessage, type CreatePackagedInput } from '@/lib/api/dashboardApi';
-import type { BatchResponse } from '@/lib/api/types';
+import { TraceTimeline } from '@/components/TraceTimeline';
+import type { BatchResponse, TraceResponse } from '@/lib/api/types';
 import { useRoleGuard } from '@/lib/auth/useRoleGuard';
 
 const INITIAL_FORM: CreatePackagedInput = {
@@ -28,6 +28,17 @@ export default function PackagerDashboardPage() {
   const [roastTransferred, setRoastTransferred] = useState<BatchResponse[]>([]);
   const [packaged, setPackaged] = useState<BatchResponse[]>([]);
   const [form, setForm] = useState<CreatePackagedInput>(INITIAL_FORM);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState('');
+  const [selectedCode, setSelectedCode] = useState('');
+  const [detailTrace, setDetailTrace] = useState<TraceResponse | null>(null);
+
+  useEffect(() => {
+    if (!message) return;
+    const timer = window.setTimeout(() => setMessage(''), 3000);
+    return () => window.clearTimeout(timer);
+  }, [message]);
 
   async function refresh() {
     setLoading(true);
@@ -76,26 +87,26 @@ export default function PackagerDashboardPage() {
     }
   }
 
-  async function downloadQr(batchId: string) {
-    setError('');
+  async function openDetail(publicCode: string) {
+    setSelectedCode(publicCode);
+    setDetailOpen(true);
+    setDetailLoading(true);
+    setDetailError('');
+    setDetailTrace(null);
     try {
-      const url = await dashboardApi.getPackagedQrUrl(batchId);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${batchId}.png`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const trace = await dashboardApi.getTrace(publicCode);
+      setDetailTrace(trace);
     } catch (e) {
-      setError(getApiErrorMessage(e));
+      setDetailError(getApiErrorMessage(e));
+    } finally {
+      setDetailLoading(false);
     }
   }
 
   if (!ready) return <LoadingState text="Đang xác thực quyền truy cập..." />;
 
   return (
-    <DashboardShell title="Packager Dashboard" subtitle="Tạo package và tải QR">
+    <DashboardShell title="Packager Dashboard" subtitle="Tạo package và quản lý lô đóng gói">
       <div className="grid gap-6 xl:grid-cols-[420px,1fr]">
         <div className="space-y-6">
           <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
@@ -195,48 +206,93 @@ export default function PackagerDashboardPage() {
           {!loading && !error && packaged.length === 0 && <EmptyState text="Chưa có Packaged batch nào." />}
 
           {!loading && !error && packaged.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b border-amber-100 text-left text-slate-500">
-                    <th className="px-2 py-2 font-medium">Mã công khai</th>
-                    <th className="px-2 py-2 font-medium">Trạng thái</th>
-                    <th className="px-2 py-2 font-medium">Cập nhật</th>
-                    <th className="px-2 py-2 font-medium">Chi tiết</th>
-                    <th className="px-2 py-2 font-medium">QR</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {packaged.map((item) => (
-                    <tr key={item.batchId} className="border-b border-amber-50">
-                      <td className="px-2 py-2 font-mono text-xs text-slate-700">{item.publicCode}</td>
-                      <td className="px-2 py-2"><StatusBadge status={item.status} /></td>
-                      <td className="px-2 py-2 text-slate-600">{new Date(item.updatedAt).toLocaleString('vi-VN')}</td>
-                      <td className="px-2 py-2">
-                        <Link
-                          href={`/trace/${encodeURIComponent(item.publicCode)}`}
-                          className="rounded-md border border-amber-200 px-2 py-1 text-xs text-amber-800 hover:bg-amber-50"
-                        >
-                          Xem chi tiết
-                        </Link>
-                      </td>
-                      <td className="px-2 py-2">
-                        <button
-                          type="button"
-                          onClick={() => void downloadQr(item.batchId)}
-                          className="rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-200"
-                        >
-                          Tải QR
-                        </button>
-                      </td>
+            <>
+              <div className="space-y-3 md:hidden">
+                {packaged.map((item) => (
+                  <article key={item.batchId} className="rounded-xl border border-amber-100 bg-amber-50/40 p-3">
+                    <p className="font-mono text-xs text-slate-700">{item.publicCode}</p>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Trạng thái</span>
+                      <StatusBadge status={item.status} />
+                    </div>
+                    <p className="mt-2 text-xs text-slate-600">Cập nhật: {new Date(item.updatedAt).toLocaleString('vi-VN')}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void openDetail(item.publicCode)}
+                        className="inline-flex items-center justify-center whitespace-nowrap rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-200"
+                      >
+                        Xem chi tiết
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+
+              <div className="hidden w-full max-w-full overflow-x-auto md:block">
+                <table className="min-w-[700px] text-sm">
+                  <thead>
+                    <tr className="border-b border-amber-100 text-left text-slate-500">
+                      <th className="px-2 py-2 font-medium">Mã công khai</th>
+                      <th className="px-2 py-2 font-medium">Trạng thái</th>
+                      <th className="px-2 py-2 font-medium">Cập nhật</th>
+                      <th className="px-2 py-2 font-medium">Chi tiết</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {packaged.map((item) => (
+                      <tr key={item.batchId} className="border-b border-amber-50">
+                        <td className="px-2 py-2 font-mono text-xs text-slate-700">{item.publicCode}</td>
+                        <td className="px-2 py-2"><StatusBadge status={item.status} /></td>
+                        <td className="px-2 py-2 text-slate-600">{new Date(item.updatedAt).toLocaleString('vi-VN')}</td>
+                        <td className="px-2 py-2">
+                          <button
+                            type="button"
+                            onClick={() => void openDetail(item.publicCode)}
+                            className="inline-flex items-center justify-center whitespace-nowrap rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-200"
+                          >
+                            Xem chi tiết
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </section>
       </div>
+
+      {detailOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-amber-200 bg-white p-5 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-amber-900">Chi tiết lô đóng gói</h3>
+                <p className="text-xs text-slate-500">Mã công khai: {selectedCode}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetailOpen(false)}
+                className="rounded-md border border-amber-200 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-50"
+              >
+                Đóng
+              </button>
+            </div>
+
+            {detailLoading && <LoadingState text="Đang tải chi tiết lô..." />}
+            {!detailLoading && detailError && <ErrorState message={detailError} />}
+            {!detailLoading && !detailError && detailTrace && (
+              <TraceTimeline
+                batches={[...detailTrace.parentChain, detailTrace.batch]}
+                farmActivities={detailTrace.farmActivities}
+                ledgerRefs={detailTrace.ledgerRefs}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </DashboardShell>
   );
 }
