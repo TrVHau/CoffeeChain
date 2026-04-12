@@ -175,6 +175,9 @@ public class EventIndexerService {
     private void handleStatusUpdated(Map<String, String> p) {
         String batchId = p.get("batchId");
         String status  = p.get("status");
+        if (status == null || status.isBlank()) {
+            status = p.get("newStatus");
+        }
         if (batchId != null && status != null) {
             batchRepository.updateStatus(batchId, status);
             log.info("STATUS_UPDATED: batchId={} → {}", batchId, status);

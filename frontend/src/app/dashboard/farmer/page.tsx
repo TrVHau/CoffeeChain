@@ -31,6 +31,7 @@ export default function FarmerDashboardPage() {
   const { ready } = useRoleGuard('FARMER');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [updatingBatchId, setUpdatingBatchId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [form, setForm] = useState<CreateHarvestInput>(INITIAL_FORM);
@@ -48,7 +49,26 @@ export default function FarmerDashboardPage() {
     setError('');
     try {
       const list = await dashboardApi.getList({ type: 'HARVEST' });
-      setBatches(list);
+      const synced = await Promise.all(
+        list.map(async (batch) => {
+          if (batch.status !== 'CREATED' && batch.status !== 'IN_PROCESS') {
+            return batch;
+          }
+          try {
+            const chainBatch = await dashboardApi.getBatchByIdChain(batch.batchId);
+            return {
+              ...batch,
+              status: chainBatch.status,
+              ownerMsp: chainBatch.ownerMsp,
+              ownerUserId: chainBatch.ownerUserId,
+              pendingToMsp: chainBatch.pendingToMsp,
+            };
+          } catch {
+            return batch;
+          }
+        }),
+      );
+      setBatches(synced);
     } catch (e) {
       setError(getApiErrorMessage(e));
     } finally {
@@ -86,6 +106,15 @@ export default function FarmerDashboardPage() {
   }
 
   async function handleUpdateStatus(batchId: string, newStatus: BatchStatus) {
+    if (updatingBatchId) return;
+    const current = batches.find((batch) => batch.batchId === batchId);
+    if (!current || !canMoveTo(current.status, newStatus)) {
+      setError('Trạng thái lô đã thay đổi. Vui lòng làm mới và thử lại.');
+      await refresh();
+      return;
+    }
+
+    setUpdatingBatchId(batchId);
     setError('');
     setMessage('');
     try {
@@ -94,7 +123,15 @@ export default function FarmerDashboardPage() {
       setMessage(`Đã thực hiện: ${actionLabel}.`);
       await refresh();
     } catch (e) {
-      setError(getApiErrorMessage(e));
+      const apiMessage = getApiErrorMessage(e);
+      if (/Invalid transition/i.test(apiMessage)) {
+        setError('Lô đã ở trạng thái mới nhất, không thể cập nhật lặp lại. Vui lòng làm mới dữ liệu.');
+        await refresh();
+      } else {
+        setError(apiMessage);
+      }
+    } finally {
+      setUpdatingBatchId(null);
     }
   }
 
@@ -205,18 +242,20 @@ export default function FarmerDashboardPage() {
                         <button
                           type="button"
                           onClick={() => void handleUpdateStatus(batch.batchId, 'IN_PROCESS')}
+                          disabled={updatingBatchId === batch.batchId}
                           className="rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-200"
                         >
-                          Đưa vào xử lý
+                          {updatingBatchId === batch.batchId ? 'Đang cập nhật...' : 'Đưa vào xử lý'}
                         </button>
                       )}
                       {canMoveTo(batch.status, 'COMPLETED') && (
                         <button
                           type="button"
                           onClick={() => void handleUpdateStatus(batch.batchId, 'COMPLETED')}
+                          disabled={updatingBatchId === batch.batchId}
                           className="rounded-md bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-200"
                         >
-                          Đánh dấu hoàn thành
+                          {updatingBatchId === batch.batchId ? 'Đang cập nhật...' : 'Đánh dấu hoàn thành'}
                         </button>
                       )}
                       {!canMoveTo(batch.status, 'IN_PROCESS') && !canMoveTo(batch.status, 'COMPLETED') && (
@@ -258,18 +297,20 @@ export default function FarmerDashboardPage() {
                               <button
                                 type="button"
                                 onClick={() => void handleUpdateStatus(batch.batchId, 'IN_PROCESS')}
+                                disabled={updatingBatchId === batch.batchId}
                                 className="rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-200"
                               >
-                                Đưa vào xử lý
+                                {updatingBatchId === batch.batchId ? 'Đang cập nhật...' : 'Đưa vào xử lý'}
                               </button>
                             )}
                             {canMoveTo(batch.status, 'COMPLETED') && (
                               <button
                                 type="button"
                                 onClick={() => void handleUpdateStatus(batch.batchId, 'COMPLETED')}
+                                disabled={updatingBatchId === batch.batchId}
                                 className="rounded-md bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-200"
                               >
-                                Đánh dấu hoàn thành
+                                {updatingBatchId === batch.batchId ? 'Đang cập nhật...' : 'Đánh dấu hoàn thành'}
                               </button>
                             )}
                             {!canMoveTo(batch.status, 'IN_PROCESS') && !canMoveTo(batch.status, 'COMPLETED') && (

@@ -5,6 +5,7 @@ import com.coffee.trace.dto.request.CreatePackagedBatchRequest;
 import com.coffee.trace.dto.request.CreateProcessedBatchRequest;
 import com.coffee.trace.dto.request.CreateRoastBatchRequest;
 import com.coffee.trace.repository.BatchRepository;
+import com.coffee.trace.service.EvidenceService;
 import com.coffee.trace.service.FabricGatewayService;
 import com.coffee.trace.service.PublicCodeService;
 import com.coffee.trace.service.QrCodeService;
@@ -31,6 +32,8 @@ class CreateControllerMappingTest {
     private FabricGatewayService fabricGateway;
     @Mock
     private PublicCodeService publicCodeService;
+        @Mock
+        private EvidenceService evidenceService;
     @Mock
     private ObjectMapper objectMapper;
     @Mock
@@ -101,7 +104,7 @@ class CreateControllerMappingTest {
 
     @Test
     void roasterCreate_mapsArgumentsToChaincodeSignature() throws Exception {
-        RoasterController controller = new RoasterController(fabricGateway, publicCodeService, objectMapper);
+        RoasterController controller = new RoasterController(fabricGateway, evidenceService, publicCodeService, objectMapper);
         CreateRoastBatchRequest req = new CreateRoastBatchRequest();
         req.setParentBatchId("PROCESSED-1");
         req.setRoastProfile("Medium");

@@ -2,14 +2,16 @@ import type {
     BatchResponse,
     BatchStatus,
     BatchType,
+    FarmActivityItem,
+    LedgerRefItem,
+} from '@/lib/api/types';
+import type {
     CreateHarvestInput,
     CreatePackagedInput,
     CreateProcessedInput,
     CreateRoastInput,
-    FarmActivityItem,
-    LedgerRefItem,
     RecordFarmActivityInput,
-} from '@/lib/api/types';
+} from '@/lib/api/dashboardApi';
 import { MOCK_TRACE_DEMO_RESPONSE } from './traceMockData';
 
 interface DashboardMockState {

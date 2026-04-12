@@ -25,6 +25,7 @@ export default function PackagerDashboardPage() {
   const [message, setMessage] = useState('');
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
 
+  const [roastPendingTransfer, setRoastPendingTransfer] = useState<BatchResponse[]>([]);
   const [roastTransferred, setRoastTransferred] = useState<BatchResponse[]>([]);
   const [packaged, setPackaged] = useState<BatchResponse[]>([]);
   const [form, setForm] = useState<CreatePackagedInput>(INITIAL_FORM);
@@ -44,10 +45,12 @@ export default function PackagerDashboardPage() {
     setLoading(true);
     setError('');
     try {
-      const [transferred, packagedList] = await Promise.all([
+      const [pendingTransfer, transferred, packagedList] = await Promise.all([
+        dashboardApi.getList({ type: 'ROAST', status: 'TRANSFER_PENDING' }),
         dashboardApi.getList({ type: 'ROAST', status: 'TRANSFERRED' }),
         dashboardApi.getList({ type: 'PACKAGED' }),
       ]);
+      setRoastPendingTransfer(pendingTransfer);
       setRoastTransferred(transferred);
       setPackaged(packagedList);
       setForm((p) => ({ ...p, parentBatchId: p.parentBatchId || transferred[0]?.batchId || '' }));
@@ -87,6 +90,18 @@ export default function PackagerDashboardPage() {
     }
   }
 
+  async function acceptTransfer(batchId: string) {
+    setError('');
+    setMessage('');
+    try {
+      await dashboardApi.acceptTransfer(batchId);
+      setMessage('Đã chấp nhận chuyển giao lô rang xay.');
+      await refresh();
+    } catch (e) {
+      setError(getApiErrorMessage(e));
+    }
+  }
+
   async function openDetail(publicCode: string) {
     setSelectedCode(publicCode);
     setDetailOpen(true);
@@ -109,6 +124,31 @@ export default function PackagerDashboardPage() {
     <DashboardShell title="Packager Dashboard" subtitle="Tạo package và quản lý lô đóng gói">
       <div className="grid gap-6 xl:grid-cols-[420px,1fr]">
         <div className="space-y-6">
+          <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
+            <h2 className="text-base font-semibold text-stone-900">Roast chờ chấp nhận chuyển giao</h2>
+            {roastPendingTransfer.length === 0 ? (
+              <p className="mt-3 text-sm text-slate-500">Hiện không có lô nào ở trạng thái TRANSFER_PENDING.</p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {roastPendingTransfer.map((item) => (
+                  <div key={item.batchId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-100 bg-amber-50/40 px-3 py-2">
+                    <div>
+                      <p className="font-mono text-xs text-slate-700">{item.publicCode}</p>
+                      <p className="text-xs text-slate-500">{item.batchId}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void acceptTransfer(item.batchId)}
+                      className="rounded-md bg-amber-800 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-amber-900"
+                    >
+                      Chấp nhận chuyển giao
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
           <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
             <h2 className="text-base font-semibold text-stone-900">Tạo Packaged batch</h2>
             <form onSubmit={createPackaged} className="mt-4 space-y-3">

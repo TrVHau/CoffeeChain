@@ -215,6 +215,20 @@ async function getBatchById(batchId: string): Promise<BatchResponse> {
   }
 }
 
+async function getBatchByIdChain(batchId: string): Promise<BatchResponse> {
+  try {
+    const res = await apiClient.get<unknown>(`/api/batch/${encodeURIComponent(batchId)}`, {
+      params: { source: 'chain' },
+    });
+    return normalizeBatch(res.data);
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockGetBatchById(batchId);
+    }
+    throw error;
+  }
+}
+
 async function getTrace(publicCode: string): Promise<TraceResponse> {
   try {
     const res = await apiClient.get<unknown>(`/api/trace/${encodeURIComponent(publicCode)}`);
@@ -460,6 +474,7 @@ async function getPackagedQrUrl(batchId: string): Promise<string> {
 export const dashboardApi = {
   getList,
   getBatchById,
+  getBatchByIdChain,
   getTrace,
   createHarvest,
   recordFarmActivity,

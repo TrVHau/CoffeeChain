@@ -188,7 +188,9 @@ public class CoffeeTraceChaincode implements ContractInterface {
                    "expiryDate",    expiryDate,
                    "qrUrl",         qrUrl));
 
-        b.setStatus("COMPLETED");
+        // FE retailer flow expects newly packaged batches to be ready for
+        // TRANSFERRED -> IN_STOCK -> SOLD transitions.
+        b.setStatus("TRANSFERRED");
 
         ctx.getStub().putState(b.getBatchId(), JSON.serialize(b));
         ctx.getStub().setEvent("BATCH_CREATED", buildBatchPayload(ctx, b));

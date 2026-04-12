@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth/useAuth';
 import { type UserRole } from '@/lib/auth/AuthContext';
 import { authenticateDevUser, DEV_LOGIN_PASSWORD, DEV_USERS } from '@/lib/mock/authMockData';
+import { apiClient } from '@/lib/api/client';
 
 function LoginForm() {
   const router = useRouter();
@@ -16,6 +17,22 @@ function LoginForm() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  interface BackendLoginResponse {
+    token: string;
+    userId: string;
+    role: string;
+  }
+
+  function normalizeRole(role: string): UserRole | null {
+    const normalized = role.toUpperCase();
+    if (normalized === 'FARMER') return 'FARMER';
+    if (normalized === 'PROCESSOR') return 'PROCESSOR';
+    if (normalized === 'ROASTER') return 'ROASTER';
+    if (normalized === 'PACKAGER') return 'PACKAGER';
+    if (normalized === 'RETAILER') return 'RETAILER';
+    return null;
+  }
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -31,19 +48,29 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      const result = authenticateDevUser(userId.trim(), password);
-      if (!result.ok) {
-        setError(result.message);
-        return;
+      const trimmedUserId = userId.trim();
+      const response = await apiClient.post<BackendLoginResponse>('/api/auth/login', {
+        userId: trimmedUserId,
+        password,
+      });
+      const role = normalizeRole(response.data.role);
+      if (!role) {
+        throw new Error('Role không hợp lệ từ backend.');
       }
-
-      login(result.userId, result.token, result.role as UserRole);
+      login(response.data.userId, response.data.token, role);
 
       const redirectTo = searchParams.get('redirectTo');
       router.push(redirectTo ?? '/dashboard');
     } catch {
-      setError('Không thể xử lý đăng nhập. Vui lòng thử lại.');
+      // Keep local mock fallback for offline FE-only development.
+      const fallback = authenticateDevUser(userId.trim(), password);
+      if (fallback.ok) {
+        login(fallback.userId, fallback.token, fallback.role as UserRole);
+        const redirectTo = searchParams.get('redirectTo');
+        router.push(redirectTo ?? '/dashboard');
+      } else {
+        setError(fallback.message);
+      }
     } finally {
       setLoading(false);
     }

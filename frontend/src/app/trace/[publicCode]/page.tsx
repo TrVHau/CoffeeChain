@@ -53,7 +53,7 @@ export default function TracePage({ params }: { params: { publicCode: string } }
   useEffect(() => {
     let cancelled = false;
     const previousBase = OpenAPI.BASE;
-    OpenAPI.BASE = typeof window === 'undefined' ? '' : window.location.origin;
+    OpenAPI.BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080';
 
     const traceRequest = TraceService.getApiTrace(publicCode);
     void (async () => {

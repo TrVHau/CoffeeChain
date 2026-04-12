@@ -30,9 +30,12 @@ if [[ -f "$NETWORK_DIR/.env" ]]; then
   set -a; source "$NETWORK_DIR/.env"; set +a
 fi
 CRYPTO_HOME="${CRYPTO_BASE:-$NETWORK_DIR/crypto-config}"
+if [[ "$CRYPTO_HOME" != /* ]]; then
+  CRYPTO_HOME="$NETWORK_DIR/${CRYPTO_HOME#./}"
+fi
 echo "  > Using CRYPTO_HOME=$CRYPTO_HOME"
 
-CA_CLIENT_BASE="/tmp/coffee-ca-client"
+CA_CLIENT_BASE="${CA_CLIENT_BASE:-$NETWORK_DIR/.runtime/coffee-ca-client}"
 
 # ── Helpers ───────────────────────────────────────────────
 
