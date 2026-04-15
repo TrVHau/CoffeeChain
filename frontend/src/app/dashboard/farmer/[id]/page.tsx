@@ -61,7 +61,7 @@ function toEvidenceUrl(uri: string): string {
 }
 
 function canShowActivityForm(batch: BatchResponse | null): boolean {
-  return !!batch && batch.status !== 'COMPLETED';
+  return !!batch && batch.status !== 'COMPLETED' && batch.status !== 'TRANSFER_PENDING';
 }
 
 function shouldAutoProgress(batch: BatchResponse | null): boolean {
@@ -160,6 +160,10 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
 
   async function handleSubmitActivity() {
     if (!batch || batch.status === 'COMPLETED') return;
+    if (batch.status === 'TRANSFER_PENDING') {
+      setError('Batch đang chuyển giao, tạm khóa ghi nhật ký canh tác.');
+      return;
+    }
     setSubmitting(true);
     setError('');
     setMessage('');
@@ -382,7 +386,9 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
               </>
             ) : (
               <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                Batch đã hoàn thành, chỉ được xem chi tiết và không thể cập nhật nhật ký canh tác.
+                {batch.status === 'TRANSFER_PENDING'
+                  ? 'Batch đang chuyển giao, chỉ được xem chi tiết và không thể cập nhật nhật ký canh tác.'
+                  : 'Batch đã hoàn thành, chỉ được xem chi tiết và không thể cập nhật nhật ký canh tác.'}
               </div>
             )}
             {message && <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</p>}

@@ -17,7 +17,7 @@ const STATUS_LABELS: Record<BatchStatus, string> = {
   IN_PROCESS: 'Đang xử lý',
   COMPLETED: 'Hoàn thành',
   TRANSFER_PENDING: 'Chờ chuyển giao',
-  TRANSFERRED: 'Đã chuyển giao',
+  TRANSFERRED: 'Đã tiếp nhận chuyển giao',
   IN_STOCK: 'Còn hàng',
   SOLD: 'Đã bán',
 };
@@ -50,6 +50,33 @@ function getInlineStatusOptions(batch: BatchResponse | null): BatchStatus[] {
   return ['IN_PROCESS', 'COMPLETED'];
 }
 
+function isTransferPending(batch: BatchResponse | null): boolean {
+  return batch?.status === 'TRANSFER_PENDING';
+}
+
+function isTransferLocked(batch: BatchResponse | null): boolean {
+  return isTransferPending(batch) && batch?.type !== 'PACKAGED';
+}
+
+function canUpdateOwnedBatch(role: UserRole, batch: BatchResponse | null): boolean {
+  if (!batch) return false;
+  if (batch.type === 'HARVEST') return role === 'FARMER';
+  if (batch.type === 'PROCESSED') return role === 'PROCESSOR';
+  if (batch.type === 'ROAST') return role === 'ROASTER';
+  if (batch.type === 'PACKAGED') return role === 'RETAILER';
+  return false;
+}
+
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function plusDaysIsoDate(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 export default function BatchUpdatePage() {
   const params = useParams<{ role: string }>();
   const pathname = usePathname();
@@ -71,6 +98,12 @@ export default function BatchUpdatePage() {
   const [nextStatus, setNextStatus] = useState<BatchStatus>('IN_PROCESS');
   const [inlineWeightKg, setInlineWeightKg] = useState('');
   const [inlineRoastDurationMinutes, setInlineRoastDurationMinutes] = useState('');
+  const [transferTargets, setTransferTargets] = useState<string[]>([]);
+  const [selectedTransferTarget, setSelectedTransferTarget] = useState('');
+  const [packageWeight, setPackageWeight] = useState('');
+  const [packageEvidenceFile, setPackageEvidenceFile] = useState<File | null>(null);
+  const [packagingSubmitting, setPackagingSubmitting] = useState(false);
+  const [packagedChild, setPackagedChild] = useState<BatchResponse | null>(null);
 
   useEffect(() => {
     if (!message) return;
@@ -88,6 +121,10 @@ export default function BatchUpdatePage() {
     setLoading(true);
     setError('');
     try {
+      const options = await dashboardApi.getAccountOptions();
+      setTransferTargets(options.transferTargets);
+      setSelectedTransferTarget((currentTarget) => currentTarget || options.transferTargets[0] || '');
+
       let current: BatchResponse;
       try {
         // Prefer read-model first to avoid 404 for entries not immediately queryable from chain.
@@ -108,10 +145,22 @@ export default function BatchUpdatePage() {
         }
       }
       setBatch(current);
+
+      let linkedPackaged: BatchResponse | null = null;
+
+      if (role === 'PACKAGER' && current.type === 'ROAST' && current.status === 'TRANSFERRED') {
+        const packagedList = await dashboardApi.getList({ type: 'PACKAGED' });
+        linkedPackaged = packagedList.find((item) => item.parentBatchId === current.batchId) ?? null;
+        setPackagedChild(linkedPackaged);
+      } else {
+        setPackagedChild(null);
+      }
+
       setDetailLoading(true);
       setDetailError('');
       try {
-        const trace = await dashboardApi.getTrace(current.publicCode);
+        const traceSourceCode = linkedPackaged?.publicCode ?? current.publicCode;
+        const trace = await dashboardApi.getTrace(traceSourceCode);
         setDetailTrace(trace);
       } catch (traceError) {
         setDetailError(getApiErrorMessage(traceError));
@@ -153,6 +202,14 @@ export default function BatchUpdatePage() {
 
   async function updateWithWeight(nextStatus: BatchStatus) {
     if (!batch) return;
+    if (!canUpdateOwnedBatch(role, batch)) {
+      setError('Bạn không có quyền cập nhật trạng thái cho loại lô này.');
+      return;
+    }
+    if (isTransferLocked(batch)) {
+      setError('Batch đang chuyển giao, không thể cập nhật thêm thông tin.');
+      return;
+    }
     if (!inlineWeightKg || !inlineWeightKg.trim()) {
       setError('Bạn cần nhập khối lượng thực tế để hoàn thành batch.');
       return;
@@ -189,6 +246,14 @@ export default function BatchUpdatePage() {
 
   async function updateStatus(nextStatus: BatchStatus) {
     if (!batch) return;
+    if (!canUpdateOwnedBatch(role, batch)) {
+      setError('Bạn không có quyền cập nhật trạng thái cho loại lô này.');
+      return;
+    }
+    if (isTransferLocked(batch)) {
+      setError('Batch đang chuyển giao, không thể cập nhật thêm thông tin.');
+      return;
+    }
     if (nextStatus === 'COMPLETED' && canFinalize(batch)) {
       await updateWithWeight(nextStatus);
       return;
@@ -234,16 +299,71 @@ export default function BatchUpdatePage() {
 
   async function requestTransfer() {
     if (!batch) return;
+    if (!selectedTransferTarget) {
+      setError('Vui lòng chọn tổ chức đích chuyển giao.');
+      return;
+    }
     setUpdating(true);
     setError('');
     setMessage('');
     try {
-      await dashboardApi.requestTransfer(batch.batchId);
-      setMessage('Đã gửi yêu cầu chuyển giao sang Org2MSP.');
+      await dashboardApi.requestTransfer(batch.batchId, selectedTransferTarget);
+      setMessage(`Đã gửi yêu cầu chuyển giao đến ${selectedTransferTarget}.`);
       await refresh();
     } catch (e) {
       setError(getApiErrorMessage(e));
     } finally {
+      setUpdating(false);
+    }
+  }
+
+  async function completePackagingFromTransferredRoast() {
+    if (!batch) return;
+    if (role !== 'PACKAGER' || batch.type !== 'ROAST' || batch.status !== 'TRANSFERRED') {
+      setError('Không đúng điều kiện đóng gói cho lô hiện tại.');
+      return;
+    }
+    if (packagedChild) {
+      setError('Lô này đã được đóng gói trước đó.');
+      return;
+    }
+
+    const normalizedWeight = packageWeight.trim();
+    if (!normalizedWeight) {
+      setError('Vui lòng nhập khối lượng đóng gói.');
+      return;
+    }
+
+    if (!packageEvidenceFile) {
+      setError('Vui lòng chụp/chọn ảnh minh chứng trước khi hoàn thành đóng gói.');
+      return;
+    }
+
+    setPackagingSubmitting(true);
+    setUpdating(true);
+    setError('');
+    setMessage('');
+    try {
+      const createdPackaged = await dashboardApi.createPackaged({
+        parentBatchId: batch.batchId,
+        packageWeight: normalizedWeight,
+        packageDate: todayIsoDate(),
+        expiryDate: plusDaysIsoDate(365),
+        packageCount: '1',
+      });
+
+      const uploaded = await dashboardApi.uploadEvidence(packageEvidenceFile);
+      await dashboardApi.addPackagedEvidence(createdPackaged.batchId, uploaded);
+
+      setPackagedChild(createdPackaged);
+      setPackageWeight('');
+      setPackageEvidenceFile(null);
+      setMessage('Đã hoàn thành đóng gói và ghi nhận minh chứng. Lô này không còn thao tác chỉnh sửa ở bước này.');
+      await refresh();
+    } catch (e) {
+      setError(getApiErrorMessage(e));
+    } finally {
+      setPackagingSubmitting(false);
       setUpdating(false);
     }
   }
@@ -304,7 +424,7 @@ export default function BatchUpdatePage() {
               <p><span className="font-medium">Trạng thái:</span> {STATUS_LABELS[batch.status] ?? batch.status}</p>
             </div>
 
-            {((role === 'PROCESSOR' && batch.type === 'PROCESSED') || (role === 'ROASTER' && batch.type === 'ROAST')) && batch.status !== 'COMPLETED' ? (
+            {((role === 'PROCESSOR' && batch.type === 'PROCESSED') || (role === 'ROASTER' && batch.type === 'ROAST')) && batch.status !== 'COMPLETED' && !isTransferLocked(batch) ? (
               <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50/60 p-4">
                 <h3 className="text-sm font-semibold text-amber-900">
                   {batch.type === 'ROAST' ? 'Cập nhật trạng thái rang xay' : 'Cập nhật trạng thái sơ chế'}
@@ -379,7 +499,13 @@ export default function BatchUpdatePage() {
               </div>
             ) : (
               <div className="mt-4 flex flex-wrap gap-2">
-                {(batch.type === 'HARVEST' || batch.type === 'PROCESSED' || batch.type === 'ROAST') && batch.status !== 'COMPLETED' && (
+                {isTransferLocked(batch) && (
+                  <div className="w-full rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Batch đang chuyển giao, chỉ được xem chi tiết cho tới khi bên nhận chấp nhận chuyển giao.
+                  </div>
+                )}
+
+                {canUpdateOwnedBatch(role, batch) && (batch.type === 'HARVEST' || batch.type === 'PROCESSED' || batch.type === 'ROAST') && batch.status !== 'COMPLETED' && !isTransferLocked(batch) && (
                   <>
                     <button
                       type="button"
@@ -400,15 +526,29 @@ export default function BatchUpdatePage() {
                   </>
                 )}
 
-                {batch.type === 'ROAST' && batch.status === 'COMPLETED' && (
-                  <button
-                    type="button"
-                    disabled={updating}
-                    onClick={() => void requestTransfer()}
-                    className="rounded-md bg-amber-100 px-3 py-2 text-xs font-medium text-amber-700 hover:bg-amber-200 disabled:opacity-50"
-                  >
-                    Yêu cầu chuyển giao
-                  </button>
+                {role === 'ROASTER' && batch.type === 'ROAST' && batch.status === 'COMPLETED' && (
+                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2">
+                    <select
+                      value={selectedTransferTarget}
+                      onChange={(e) => setSelectedTransferTarget(e.target.value)}
+                      className="min-w-[180px] rounded-md border border-amber-200 bg-white px-2 py-1 text-xs text-amber-900"
+                    >
+                      {transferTargets.length === 0 && <option value="">Không có tổ chức đích</option>}
+                      {transferTargets.map((target) => (
+                        <option key={target} value={target}>
+                          {target}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      disabled={updating || !selectedTransferTarget}
+                      onClick={() => void requestTransfer()}
+                      className="rounded-md bg-amber-100 px-3 py-2 text-xs font-medium text-amber-700 hover:bg-amber-200 disabled:opacity-50"
+                    >
+                      Yêu cầu chuyển giao
+                    </button>
+                  </div>
                 )}
 
                 {batch.type === 'PACKAGED' && batch.status === 'TRANSFER_PENDING' && (
@@ -422,7 +562,7 @@ export default function BatchUpdatePage() {
                   </button>
                 )}
 
-                {batch.type === 'PACKAGED' && batch.status === 'TRANSFERRED' && (
+                {role === 'RETAILER' && batch.type === 'PACKAGED' && batch.status === 'TRANSFERRED' && (
                   <button
                     type="button"
                     disabled={updating}
@@ -433,7 +573,7 @@ export default function BatchUpdatePage() {
                   </button>
                 )}
 
-                {batch.type === 'PACKAGED' && batch.status === 'IN_STOCK' && (
+                {role === 'RETAILER' && batch.type === 'PACKAGED' && batch.status === 'IN_STOCK' && (
                   <button
                     type="button"
                     disabled={updating}
@@ -454,6 +594,63 @@ export default function BatchUpdatePage() {
                     Tải QR
                   </button>
                 )}
+
+                {role === 'PACKAGER' && batch.type !== 'PACKAGED' && (
+                  <div className="w-full rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Vai trò PACKAGER chỉ xem chi tiết tại trang này; thao tác chuyển trạng thái của lô này thuộc vai trò khác.
+                  </div>
+                )}
+
+                {role === 'PACKAGER' && batch.type === 'ROAST' && batch.status === 'TRANSFERRED' && !packagedChild && (
+                  <div className="w-full rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Đóng gói lô đã tiếp nhận</p>
+                    <div className="grid gap-2">
+                      <label className="text-xs text-slate-700">
+                        <span className="mb-1 block font-medium">Khối lượng đóng gói</span>
+                        <input
+                          value={packageWeight}
+                          onChange={(e) => setPackageWeight(e.target.value)}
+                          disabled={packagingSubmitting}
+                          placeholder="Ví dụ: 250"
+                          className="w-full rounded-md border border-amber-200 bg-white px-2 py-1.5 text-xs outline-none ring-amber-400 focus:ring"
+                        />
+                      </label>
+                      <label className="text-xs text-slate-700">
+                        <span className="mb-1 block font-medium">Ảnh minh chứng đóng gói</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          disabled={packagingSubmitting}
+                          onChange={(e) => setPackageEvidenceFile(e.target.files?.[0] ?? null)}
+                          className="w-full rounded-md border border-amber-200 bg-white px-2 py-1.5 text-xs outline-none ring-amber-400 focus:ring"
+                        />
+                      </label>
+                      {packageEvidenceFile && (
+                        <p className="text-xs text-slate-500">Đã chọn: {packageEvidenceFile.name}</p>
+                      )}
+                      <button
+                        type="button"
+                        disabled={packagingSubmitting}
+                        onClick={() => void completePackagingFromTransferredRoast()}
+                        className="rounded-md bg-amber-700 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
+                      >
+                        {packagingSubmitting ? 'Đang hoàn thành...' : 'Hoàn thành đóng gói'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {role === 'PACKAGER' && batch.type === 'ROAST' && batch.status === 'TRANSFERRED' && packagedChild && (
+                  <div className="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                    Lô này đã đóng gói xong ({packagedChild.publicCode}). Bạn chỉ có quyền xem, không thể chỉnh sửa thêm.
+                  </div>
+                )}
+
+                {role === 'PACKAGER' && batch.type === 'PACKAGED' && (batch.status === 'TRANSFERRED' || batch.status === 'IN_STOCK') && (
+                  <div className="w-full rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Trạng thái bán lẻ (IN_STOCK/SOLD) chỉ được cập nhật bởi tài khoản RETAILER.
+                  </div>
+                )}
               </div>
             )}
 
@@ -473,7 +670,7 @@ export default function BatchUpdatePage() {
           <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-base font-semibold text-amber-900">Dòng truy xuất</h3>
-              <span className="text-xs text-slate-500">Batch ID: {batch.batchId}</span>
+              <span className="text-xs text-slate-500">Batch ID: {detailTrace?.batch.batchId ?? batch.batchId}</span>
             </div>
 
             {message && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</p>}

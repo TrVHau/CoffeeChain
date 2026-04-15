@@ -83,8 +83,7 @@ public class FabricGatewayService {
 
     /**
      * Submit acceptTransfer — requires SBE AND endorsement from both Org1 + Org2.
-     * Service discovery should handle peer selection automatically when anchor peers are configured.
-     * Uncomment .withEndorsingOrgs() as fallback if service discovery fails in Docker Compose.
+     * Force the proposal to target both organizations so endorsement does not depend on discovery.
      */
     public byte[] submitAcceptTransfer(String userId, String batchId) throws Exception {
         Gateway gw = gatewayByUser.get(userId);
@@ -94,8 +93,7 @@ public class FabricGatewayService {
         return getContract(gw)
                 .newProposal("acceptTransfer")
                 .addArguments(batchId)
-                // Fallback — uncomment if service discovery cannot resolve both peers:
-                // .withEndorsingOrgs("Org1MSP", "Org2MSP")
+                .setEndorsingOrganizations("Org1MSP", "Org2MSP")
                 .build()
                 .endorse()
                 .submit();

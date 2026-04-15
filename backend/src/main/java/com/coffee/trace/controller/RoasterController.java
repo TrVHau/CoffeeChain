@@ -89,6 +89,14 @@ public class RoasterController {
     public ResponseEntity<?> addEvidence(@AuthenticationPrincipal String userId,
                                          @PathVariable String id,
                                          @Valid @RequestBody AddEvidenceRequest req) throws Exception {
+        if (isTransferPending(id)) {
+            return ResponseEntity.status(409).body(Map.of(
+                "error", "Batch đang chuyển giao, tạm khóa cập nhật minh chứng.",
+                "batchId", id,
+                "currentStatus", "TRANSFER_PENDING"
+            ));
+        }
+
         // IPFS upload is handled by Unit-3's EvidenceService before calling this endpoint.
         // This endpoint records the hash + URI on-chain.
         byte[] result = fabricGateway.submitAs(userId, "addEvidence",
@@ -111,6 +119,14 @@ public class RoasterController {
     public ResponseEntity<?> updateStatus(@AuthenticationPrincipal String userId,
                                           @PathVariable String id,
                                           @Valid @RequestBody UpdateStatusRequest req) throws Exception {
+        if (isTransferPending(id)) {
+            return ResponseEntity.status(409).body(Map.of(
+                "error", "Batch đang chuyển giao, tạm khóa cập nhật trạng thái.",
+                "batchId", id,
+                "currentStatus", "TRANSFER_PENDING"
+            ));
+        }
+
         byte[] result = fabricGateway.submitAs(userId, "updateBatchStatus", id, req.getNewStatus());
 
         if ("COMPLETED".equalsIgnoreCase(req.getNewStatus())) {
@@ -136,6 +152,12 @@ public class RoasterController {
         }
 
         return ResponseEntity.ok(toResponse(result, "updateBatchStatus"));
+    }
+
+    private boolean isTransferPending(String batchId) throws Exception {
+        byte[] batchRaw = fabricGateway.evaluateTransaction("Org1", "getBatch", batchId);
+        Map<String, Object> batch = objectMapper.readValue(batchRaw, new TypeReference<Map<String, Object>>() {});
+        return "TRANSFER_PENDING".equalsIgnoreCase(String.valueOf(batch.getOrDefault("status", "")));
     }
 
     private Map<String, Object> toResponse(byte[] result, String action) throws Exception {

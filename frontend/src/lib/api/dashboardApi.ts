@@ -168,6 +168,7 @@ export interface CreateRoastInput {
 export interface AccountOptions {
   farmLocations: string[];
   processingFacilities: string[];
+  transferTargets: string[];
 }
 
 export interface CreatePackagedInput {
@@ -416,10 +417,11 @@ async function getAccountOptions(): Promise<AccountOptions> {
     return {
       farmLocations: Array.isArray(row.farmLocations) ? row.farmLocations.map((item) => asString(item)).filter(Boolean) : [],
       processingFacilities: Array.isArray(row.processingFacilities) ? row.processingFacilities.map((item) => asString(item)).filter(Boolean) : [],
+      transferTargets: Array.isArray(row.transferTargets) ? row.transferTargets.map((item) => asString(item)).filter(Boolean) : [],
     };
   } catch (error) {
     if (isOfflineError(error)) {
-      return { farmLocations: [], processingFacilities: [] };
+      return { farmLocations: [], processingFacilities: [], transferTargets: [] };
     }
     throw error;
   }
@@ -482,9 +484,9 @@ async function uploadEvidence(file: File): Promise<UploadedEvidence> {
   }
 }
 
-async function requestTransfer(batchId: string): Promise<BatchResponse> {
+async function requestTransfer(batchId: string, toMSP: string): Promise<BatchResponse> {
   try {
-    const res = await apiClient.post<unknown>('/api/transfer/request', { batchId, toMSP: 'Org2MSP' });
+    const res = await apiClient.post<unknown>('/api/transfer/request', { batchId, toMSP });
     return normalizeBatch(res.data);
   } catch (error) {
     if (isOfflineError(error)) {

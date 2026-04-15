@@ -74,7 +74,7 @@ describe('dashboardApi', () => {
       },
     } as never);
 
-    await dashboardApi.requestTransfer('B1');
+    await dashboardApi.requestTransfer('B1', 'Org2MSP');
 
     expect(mockApiClient.post).toHaveBeenCalledWith('/api/transfer/request', {
       batchId: 'B1',

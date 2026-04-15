@@ -5,30 +5,10 @@ import { useEffect, useState } from 'react';
 import { DashboardShell } from '@/components/dashboard/DashboardShell';
 import { EmptyState, ErrorState, LoadingState } from '@/components/dashboard/UiState';
 import { StatusBadge } from '@/components/dashboard/StatusBadge';
-import { QrScanner } from '@/components/QrScanner';
-import { dashboardApi, getApiErrorMessage, type CreatePackagedInput } from '@/lib/api/dashboardApi';
+import { dashboardApi, getApiErrorMessage } from '@/lib/api/dashboardApi';
 import { TraceTimeline } from '@/components/TraceTimeline';
 import type { BatchResponse, TraceResponse } from '@/lib/api/types';
 import { useRoleGuard } from '@/lib/auth/useRoleGuard';
-
-const INITIAL_FORM: CreatePackagedInput = {
-  parentBatchId: '',
-  packageWeight: '',
-  packageDate: '',
-  expiryDate: '',
-  packageCount: '',
-};
-
-function getTodayDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function buildInitialForm(): CreatePackagedInput {
-  return {
-    ...INITIAL_FORM,
-    packageDate: getTodayDate(),
-  };
-}
 
 function isMetadataEmpty(batch: BatchResponse): boolean {
   return !batch.metadata || Object.keys(batch.metadata).length === 0;
@@ -47,39 +27,35 @@ function toEvidenceUrl(uri: string): string {
   return uri;
 }
 
-function extractTraceCode(value: string): string {
-  const trimmed = value.trim();
-  const matched = trimmed.match(/\/trace\/([^/?#\s]+)/i);
-  return matched ? matched[1] : trimmed;
+const PAGE_SIZE = 10;
+
+function sortByUpdatedAtDesc(items: BatchResponse[]): BatchResponse[] {
+  return [...items].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 }
 
-const PAGE_SIZE = 10;
+function mergeByBatchId(items: BatchResponse[]): BatchResponse[] {
+  return items.filter((item, index, array) => array.findIndex((x) => x.batchId === item.batchId) === index);
+}
 
 export default function PackagerDashboardPage() {
   const { ready } = useRoleGuard('PACKAGER');
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
 
   const [roastPendingTransfer, setRoastPendingTransfer] = useState<BatchResponse[]>([]);
   const [roastTransferred, setRoastTransferred] = useState<BatchResponse[]>([]);
-  const [packaged, setPackaged] = useState<BatchResponse[]>([]);
-  const [form, setForm] = useState<CreatePackagedInput>(buildInitialForm());
+  const [acceptedRoasts, setAcceptedRoasts] = useState<BatchResponse[]>([]);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
   const [selectedCode, setSelectedCode] = useState('');
   const [detailTrace, setDetailTrace] = useState<TraceResponse | null>(null);
-  const [sourceCodeInput, setSourceCodeInput] = useState('');
-  const [sourceResolving, setSourceResolving] = useState(false);
-  const [resolvedSource, setResolvedSource] = useState<BatchResponse | null>(null);
-  const [showScanner, setShowScanner] = useState(false);
+  const [acceptingBatchId, setAcceptingBatchId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
 
-  const totalPages = Math.max(1, Math.ceil(packaged.length / PAGE_SIZE));
-  const pagedPackaged = packaged.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(acceptedRoasts.length / PAGE_SIZE));
+  const pagedAcceptedRoasts = acceptedRoasts.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   useEffect(() => {
     if (!message) return;
@@ -91,18 +67,22 @@ export default function PackagerDashboardPage() {
     setLoading(true);
     setError('');
     try {
-      const [pendingTransfer, transferred, packagedList] = await Promise.all([
+      const [pendingTransfer, transferred] = await Promise.all([
         dashboardApi.getList({ type: 'ROAST', status: 'TRANSFER_PENDING' }),
         dashboardApi.getList({ type: 'ROAST', status: 'TRANSFERRED' }),
-        dashboardApi.getList({ type: 'PACKAGED' }),
       ]);
 
-      const [pendingEnriched, transferredEnriched, packagedEnriched] = await Promise.all([
+      const [pendingEnriched, transferredEnriched] = await Promise.all([
         Promise.all(pendingTransfer.map(async (item) => {
-          if (!isMetadataEmpty(item)) return item;
           try {
             const chainBatch = await dashboardApi.getBatchByIdChain(item.batchId);
-            return { ...item, metadata: chainBatch.metadata };
+            return {
+              ...item,
+              status: chainBatch.status,
+              ownerMsp: chainBatch.ownerMsp,
+              pendingToMsp: chainBatch.pendingToMsp,
+              metadata: !isMetadataEmpty(item) ? item.metadata : chainBatch.metadata,
+            };
           } catch {
             return item;
           }
@@ -116,20 +96,15 @@ export default function PackagerDashboardPage() {
             return item;
           }
         })),
-        Promise.all(packagedList.map(async (item) => {
-          if (!isMetadataEmpty(item)) return item;
-          try {
-            const chainBatch = await dashboardApi.getBatchByIdChain(item.batchId);
-            return { ...item, metadata: chainBatch.metadata };
-          } catch {
-            return item;
-          }
-        })),
       ]);
 
-      setRoastPendingTransfer(pendingEnriched);
-      setRoastTransferred(transferredEnriched);
-      setPackaged(packagedEnriched);
+      const normalizedPending = pendingEnriched.filter((item) => item.status === 'TRANSFER_PENDING');
+      const movedToTransferred = pendingEnriched.filter((item) => item.status === 'TRANSFERRED');
+      const normalizedTransferred = sortByUpdatedAtDesc(mergeByBatchId([...movedToTransferred, ...transferredEnriched]));
+
+      setRoastPendingTransfer(normalizedPending);
+      setRoastTransferred(normalizedTransferred);
+      setAcceptedRoasts(normalizedTransferred);
     } catch (e) {
       setError(getApiErrorMessage(e));
     } finally {
@@ -146,46 +121,35 @@ export default function PackagerDashboardPage() {
     setPage((current) => Math.min(current, totalPages));
   }, [totalPages]);
 
-  async function createPackaged(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.parentBatchId) {
-      setError('Vui lòng nhập mã hoặc quét QR để xác định Roast nguồn trước khi tạo batch.');
-      return;
-    }
-    if (!evidenceFile) {
-      setError('Vui lòng chọn ảnh minh chứng trước khi tạo Packaged batch.');
-      return;
-    }
-    setSubmitting(true);
-    setError('');
-    setMessage('');
-    try {
-      const created = await dashboardApi.createPackaged({
-        ...form,
-        packageDate: getTodayDate(),
-      });
-      const evidence = await dashboardApi.uploadEvidence(evidenceFile);
-      await dashboardApi.addPackagedEvidence(created.batchId, evidence);
-      setForm((p) => ({ ...buildInitialForm(), parentBatchId: p.parentBatchId }));
-      setEvidenceFile(null);
-      setMessage('Đã tạo Packaged batch và cập nhật minh chứng thành công.');
-      await refresh();
-    } catch (e) {
-      setError(getApiErrorMessage(e));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   async function acceptTransfer(batchId: string) {
     setError('');
     setMessage('');
+    setAcceptingBatchId(batchId);
     try {
       await dashboardApi.acceptTransfer(batchId);
+
+      const now = new Date().toISOString();
+      const moved = roastPendingTransfer.find((item) => item.batchId === batchId);
+      if (moved) {
+        const acceptedItem: BatchResponse = {
+          ...moved,
+          status: 'TRANSFERRED',
+          ownerMsp: 'Org2MSP',
+          pendingToMsp: null,
+          updatedAt: now,
+        };
+        setRoastPendingTransfer((current) => current.filter((item) => item.batchId !== batchId));
+        setRoastTransferred((current) => sortByUpdatedAtDesc(mergeByBatchId([acceptedItem, ...current])));
+        setAcceptedRoasts((current) => sortByUpdatedAtDesc(mergeByBatchId([acceptedItem, ...current])));
+        setPage(1);
+      }
+
       setMessage('Đã chấp nhận chuyển giao lô rang xay.');
-      await refresh();
+      void refresh();
     } catch (e) {
       setError(getApiErrorMessage(e));
+    } finally {
+      setAcceptingBatchId((current) => (current === batchId ? null : current));
     }
   }
 
@@ -205,182 +169,14 @@ export default function PackagerDashboardPage() {
     }
   }
 
-  async function resolveRoastSource(rawCode: string) {
-    const code = extractTraceCode(rawCode);
-    if (!code) {
-      setError('Vui lòng nhập mã nguồn hợp lệ.');
-      return;
-    }
-
-    setSourceResolving(true);
-    setError('');
-    setMessage('');
-
-    try {
-      const trace = await dashboardApi.getTrace(code);
-      const chain = [...trace.parentChain, trace.batch];
-      const candidates = chain
-        .filter((item) => item.type === 'ROAST' && item.status === 'TRANSFERRED')
-        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-
-      const candidate = candidates[0];
-      if (!candidate) {
-        throw new Error('Không tìm thấy ROAST ở trạng thái TRANSFERRED từ mã đã nhập/quét.');
-      }
-
-      setForm((p) => ({ ...p, parentBatchId: candidate.batchId }));
-      setResolvedSource(candidate);
-      setSourceCodeInput(code);
-      setMessage(`Đã xác định Roast nguồn: ${candidate.publicCode}`);
-    } catch (e) {
-      setForm((p) => ({ ...p, parentBatchId: '' }));
-      setResolvedSource(null);
-      setError(getApiErrorMessage(e));
-    } finally {
-      setSourceResolving(false);
-    }
-  }
-
   if (!ready) return <LoadingState text="Đang xác thực quyền truy cập..." />;
 
   return (
     <DashboardShell title="Packager Dashboard" subtitle="Tạo package và quản lý lô đóng gói">
       <div className="grid gap-6 xl:grid-cols-[420px,1fr]">
-        <div className="space-y-6">
-          <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
-            <h2 className="text-base font-semibold text-stone-900">Roast chờ chấp nhận chuyển giao</h2>
-            {roastPendingTransfer.length === 0 ? (
-              <p className="mt-3 text-sm text-slate-500">Hiện không có lô nào ở trạng thái TRANSFER_PENDING.</p>
-            ) : (
-              <div className="mt-3 space-y-2">
-                {roastPendingTransfer.map((item) => (
-                  <div key={item.batchId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-100 bg-amber-50/40 px-3 py-2">
-                    <div>
-                      <p className="font-mono text-xs text-slate-700">{item.publicCode}</p>
-                      <p className="text-xs text-slate-500">{item.batchId}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void acceptTransfer(item.batchId)}
-                      className="rounded-md bg-amber-800 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-amber-900"
-                    >
-                      Chấp nhận chuyển giao
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
-            <h2 className="text-base font-semibold text-stone-900">Tạo Packaged batch</h2>
-            <form onSubmit={createPackaged} className="mt-4 space-y-3">
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Roast nguồn (nhập mã hoặc quét QR)</span>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <input
-                    value={sourceCodeInput}
-                    onChange={(e) => setSourceCodeInput(e.target.value)}
-                    className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
-                    placeholder="Nhập mã public code hoặc link /trace/..."
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void resolveRoastSource(sourceCodeInput)}
-                    disabled={!sourceCodeInput.trim() || sourceResolving}
-                    className="rounded-lg border border-amber-300 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-50"
-                  >
-                    {sourceResolving ? 'Đang tìm...' : 'Xác định nguồn'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowScanner((v) => !v)}
-                    className="rounded-lg border border-amber-300 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50"
-                  >
-                    {showScanner ? 'Ẩn QR' : 'Quét QR'}
-                  </button>
-                </div>
-                {showScanner && (
-                  <div className="mt-3 rounded-lg border border-amber-100 bg-amber-50/40 p-3">
-                    <QrScanner
-                      autoNavigate={false}
-                      onCodeDetected={(code) => {
-                        setSourceCodeInput(code);
-                        setShowScanner(false);
-                        void resolveRoastSource(code);
-                      }}
-                    />
-                  </div>
-                )}
-                {resolvedSource && (
-                  <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
-                    Nguồn đã chọn: {resolvedSource.publicCode} | {resolvedSource.metadata?.roastProfile ?? 'Chưa có profile'}
-                  </p>
-                )}
-              </label>
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Khối lượng gói</span>
-                <input
-                  value={form.packageWeight}
-                  onChange={(e) => setForm((p) => ({ ...p, packageWeight: e.target.value }))}
-                  required
-                  className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
-                  placeholder="250"
-                />
-              </label>
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Ngày đóng gói (tự động)</span>
-                <input
-                  type="text"
-                  value={form.packageDate}
-                  readOnly
-                  className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
-                />
-              </label>
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Ngày hết hạn</span>
-                <input
-                  type="date"
-                  value={form.expiryDate}
-                  onChange={(e) => setForm((p) => ({ ...p, expiryDate: e.target.value }))}
-                  required
-                  className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
-                />
-              </label>
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Số lượng gói</span>
-                <input
-                  value={form.packageCount}
-                  onChange={(e) => setForm((p) => ({ ...p, packageCount: e.target.value }))}
-                  required
-                  className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
-                />
-              </label>
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Ảnh minh chứng</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setEvidenceFile(e.target.files?.[0] ?? null)}
-                  required
-                  className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
-                />
-              </label>
-              {evidenceFile && <p className="text-xs text-slate-500">Đã chọn: {evidenceFile.name}</p>}
-              <button
-                type="submit"
-                disabled={submitting || !form.parentBatchId}
-                className="w-full rounded-lg bg-amber-800 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-900 disabled:opacity-50"
-              >
-                {submitting ? 'Đang tạo...' : 'Tạo Packaged batch'}
-              </button>
-            </form>
-          </section>
-        </div>
-
         <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-stone-900">Danh sách Packaged</h2>
+            <h2 className="text-base font-semibold text-stone-900">Roast chờ chấp nhận chuyển giao</h2>
             <button
               type="button"
               onClick={() => void refresh()}
@@ -392,16 +188,55 @@ export default function PackagerDashboardPage() {
           {message && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</p>}
           {error && <ErrorState message={error} />}
           {loading && <LoadingState />}
-          {!loading && !error && packaged.length === 0 && <EmptyState text="Chưa có Packaged batch nào." />}
+          {!loading && !error && roastPendingTransfer.length === 0 && <EmptyState text="Hiện không có lô nào ở trạng thái TRANSFER_PENDING." />}
 
-          {!loading && !error && packaged.length > 0 && (
+          {!loading && !error && roastPendingTransfer.length > 0 && (
+            <div className="space-y-3">
+              {roastPendingTransfer.map((item) => (
+                <div key={item.batchId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-100 bg-amber-50/40 px-3 py-2">
+                  <div>
+                    <p className="font-mono text-xs text-slate-700">{item.publicCode}</p>
+                    <p className="text-xs text-slate-500">{item.batchId}</p>
+                    <p className="text-xs text-amber-700">Tổ chức nguồn: {item.ownerMsp ?? 'Org1MSP'}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void acceptTransfer(item.batchId)}
+                    disabled={acceptingBatchId === item.batchId}
+                    className="rounded-md bg-amber-800 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-amber-900 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {acceptingBatchId === item.batchId ? 'Đang xử lý...' : 'Chấp nhận chuyển giao'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-base font-semibold text-stone-900">Roast đã nhận chuyển giao</h2>
+            <button
+              type="button"
+              onClick={() => void refresh()}
+              className="rounded-lg border border-amber-200 px-3 py-1.5 text-sm text-amber-800 hover:bg-amber-50"
+            >
+              Làm mới
+            </button>
+          </div>
+          {message && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</p>}
+          {error && <ErrorState message={error} />}
+          {loading && <LoadingState />}
+          {!loading && !error && acceptedRoasts.length === 0 && <EmptyState text="Chưa có lô Roast nào đã được chấp nhận chuyển giao." />}
+
+          {!loading && !error && acceptedRoasts.length > 0 && (
             <>
               <div className="space-y-3 md:hidden">
-                {pagedPackaged.map((item) => (
+                {pagedAcceptedRoasts.map((item) => (
                   <article key={item.batchId} className="rounded-xl border border-amber-100 bg-amber-50/40 p-3">
                     <p className="font-mono text-xs text-slate-700">{item.publicCode}</p>
-                    <p className="mt-1 text-xs text-slate-700"><span className="font-medium">Khối lượng:</span> {item.metadata?.packageWeight ?? '—'}</p>
-                    <p className="mt-1 text-xs text-slate-600"><span className="font-medium">Số lượng gói:</span> {item.metadata?.packageCount ?? '—'}</p>
+                    <p className="mt-1 text-xs text-slate-700"><span className="font-medium">Hồ sơ rang:</span> {item.metadata?.roastProfile ?? '—'}</p>
+                    <p className="mt-1 text-xs text-slate-600"><span className="font-medium">Khối lượng:</span> {item.metadata?.weightKg ?? '—'}</p>
                     <div className="mt-2 flex items-center justify-between">
                       <span className="text-xs text-slate-500">Trạng thái</span>
                       <StatusBadge status={item.status} />
@@ -431,8 +266,8 @@ export default function PackagerDashboardPage() {
                 <table className="min-w-[700px] text-sm">
                   <thead>
                     <tr className="border-b border-amber-100 text-left text-slate-500">
-                      <th className="px-2 py-2 font-medium">Khối lượng gói</th>
-                      <th className="px-2 py-2 font-medium">Số lượng gói</th>
+                      <th className="px-2 py-2 font-medium">Khối lượng</th>
+                      <th className="px-2 py-2 font-medium">Hồ sơ rang</th>
                       <th className="px-2 py-2 font-medium">Mã công khai</th>
                       <th className="px-2 py-2 font-medium">Trạng thái</th>
                       <th className="px-2 py-2 font-medium">Cập nhật</th>
@@ -441,10 +276,10 @@ export default function PackagerDashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {pagedPackaged.map((item) => (
+                    {pagedAcceptedRoasts.map((item) => (
                       <tr key={item.batchId} className="border-b border-amber-50">
-                        <td className="px-2 py-2 text-xs text-slate-700">{item.metadata?.packageWeight ?? '—'}</td>
-                        <td className="px-2 py-2 text-xs text-slate-700">{item.metadata?.packageCount ?? '—'}</td>
+                        <td className="px-2 py-2 text-xs text-slate-700">{item.metadata?.weightKg ?? '—'}</td>
+                        <td className="px-2 py-2 text-xs text-slate-700">{item.metadata?.roastProfile ?? '—'}</td>
                         <td className="px-2 py-2 font-mono text-xs text-slate-700">{item.publicCode}</td>
                         <td className="px-2 py-2"><StatusBadge status={item.status} /></td>
                         <td className="px-2 py-2 text-slate-600">{new Date(item.updatedAt).toLocaleString('vi-VN')}</td>

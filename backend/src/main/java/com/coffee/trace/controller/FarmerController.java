@@ -68,6 +68,14 @@ public class FarmerController {
     public ResponseEntity<?> recordActivity(@AuthenticationPrincipal String userId,
                                             @PathVariable String id,
                                             @Valid @RequestBody RecordFarmActivityRequest req) throws Exception {
+        if (isTransferPending(id)) {
+            return ResponseEntity.status(409).body(Map.of(
+                "error", "Batch đang chuyển giao, tạm khóa nhật ký canh tác.",
+                "batchId", id,
+                "currentStatus", "TRANSFER_PENDING"
+            ));
+        }
+
         byte[] batchRaw = fabricGateway.evaluateTransaction("Org1", "getBatch", id);
         Map<String, Object> batch = objectMapper.readValue(batchRaw, new TypeReference<Map<String, Object>>() {});
         String status = String.valueOf(batch.getOrDefault("status", ""));
@@ -95,6 +103,14 @@ public class FarmerController {
     public ResponseEntity<?> addEvidence(@AuthenticationPrincipal String userId,
                                          @PathVariable String id,
                                          @Valid @RequestBody AddEvidenceRequest req) throws Exception {
+        if (isTransferPending(id)) {
+            return ResponseEntity.status(409).body(Map.of(
+                "error", "Batch đang chuyển giao, tạm khóa cập nhật minh chứng.",
+                "batchId", id,
+                "currentStatus", "TRANSFER_PENDING"
+            ));
+        }
+
         byte[] result = fabricGateway.submitAs(userId, "addEvidence",
                 id, req.getEvidenceHash(), req.getEvidenceUri());
         return ResponseEntity.ok(toResponse(result, "addEvidence"));
@@ -106,6 +122,14 @@ public class FarmerController {
     public ResponseEntity<?> updateStatus(@AuthenticationPrincipal String userId,
                                           @PathVariable String id,
                                           @Valid @RequestBody UpdateStatusRequest req) throws Exception {
+        if (isTransferPending(id)) {
+            return ResponseEntity.status(409).body(Map.of(
+                "error", "Batch đang chuyển giao, tạm khóa cập nhật trạng thái.",
+                "batchId", id,
+                "currentStatus", "TRANSFER_PENDING"
+            ));
+        }
+
         byte[] result = fabricGateway.submitAs(userId, "updateBatchStatus", id, req.getNewStatus());
 
         if ("COMPLETED".equalsIgnoreCase(req.getNewStatus())) {
@@ -118,6 +142,12 @@ public class FarmerController {
         }
 
         return ResponseEntity.ok(toResponse(result, "updateBatchStatus"));
+    }
+
+    private boolean isTransferPending(String batchId) throws Exception {
+        byte[] batchRaw = fabricGateway.evaluateTransaction("Org1", "getBatch", batchId);
+        Map<String, Object> batch = objectMapper.readValue(batchRaw, new TypeReference<Map<String, Object>>() {});
+        return "TRANSFER_PENDING".equalsIgnoreCase(String.valueOf(batch.getOrDefault("status", "")));
     }
 
     private Map<String, Object> toResponse(byte[] result, String action) throws Exception {

@@ -22,6 +22,7 @@ function LoginForm() {
     token: string;
     userId: string;
     role: string;
+    org?: string;
   }
 
   function normalizeRole(role: string): UserRole | null {
@@ -57,7 +58,7 @@ function LoginForm() {
       if (!role) {
         throw new Error('Role không hợp lệ từ backend.');
       }
-      login(response.data.userId, response.data.token, role);
+      login(response.data.userId, response.data.token, role, response.data.org ?? 'UNKNOWN');
 
       const redirectTo = searchParams.get('redirectTo');
       router.push(redirectTo ?? '/dashboard');
@@ -65,7 +66,7 @@ function LoginForm() {
       // Keep local mock fallback for offline FE-only development.
       const fallback = authenticateDevUser(userId.trim(), password);
       if (fallback.ok) {
-        login(fallback.userId, fallback.token, fallback.role as UserRole);
+        login(fallback.userId, fallback.token, fallback.role as UserRole, fallback.org);
         const redirectTo = searchParams.get('redirectTo');
         router.push(redirectTo ?? '/dashboard');
       } else {

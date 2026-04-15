@@ -25,7 +25,8 @@ public class AccountOptionsController {
     public ResponseEntity<?> getOptions(@AuthenticationPrincipal String userId) {
         return ResponseEntity.ok(Map.of(
                 "farmLocations", accountOptionsService.getFarmLocations(userId),
-                "processingFacilities", accountOptionsService.getProcessingFacilities(userId)
+                "processingFacilities", accountOptionsService.getProcessingFacilities(userId),
+                "transferTargets", accountOptionsService.getTransferTargets(userId)
         ));
     }
 }

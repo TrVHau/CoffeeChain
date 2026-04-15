@@ -53,6 +53,6 @@ export function authenticateDevUser(userId: string, password: string): DevAuthRe
         userId,
         role,
         token: `dev.${userId}.${role.toLowerCase()}`,
-        org: `${role}Org`,
+        org: role === 'PACKAGER' || role === 'RETAILER' ? 'Org2' : 'Org1',
     };
 }

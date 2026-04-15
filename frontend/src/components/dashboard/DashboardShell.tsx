@@ -112,6 +112,7 @@ export function DashboardShell({ title, subtitle, children }: DashboardShellProp
                   {user?.userId}
                 </p>
                 <p className="text-amber-800">{user?.role}</p>
+                <p className="font-medium text-amber-900">Tổ chức: {user?.org ?? 'UNKNOWN'}</p>
               </div>
               <button
                 type="button"

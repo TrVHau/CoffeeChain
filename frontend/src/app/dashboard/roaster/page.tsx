@@ -83,6 +83,8 @@ export default function RoasterDashboardPage() {
   const [sourceResolving, setSourceResolving] = useState(false);
   const [resolvedSource, setResolvedSource] = useState<BatchResponse | null>(null);
   const [showScanner, setShowScanner] = useState(false);
+  const [transferTargets, setTransferTargets] = useState<string[]>([]);
+  const [selectedTransferTarget, setSelectedTransferTarget] = useState('');
   const [page, setPage] = useState(1);
 
   const totalPages = Math.max(1, Math.ceil(roasts.length / PAGE_SIZE));
@@ -98,9 +100,10 @@ export default function RoasterDashboardPage() {
     setLoading(true);
     setError('');
     try {
-      const [parentList, roastList] = await Promise.all([
+      const [parentList, roastList, options] = await Promise.all([
         dashboardApi.getList({ type: 'PROCESSED', status: 'COMPLETED' }),
         dashboardApi.getList({ type: 'ROAST' }),
+        dashboardApi.getAccountOptions(),
       ]);
 
       const [parentsEnriched, roastsEnriched] = await Promise.all([
@@ -125,6 +128,8 @@ export default function RoasterDashboardPage() {
       ]);
 
       setRoasts(roastsEnriched);
+      setTransferTargets(options.transferTargets);
+      setSelectedTransferTarget((current) => current || options.transferTargets[0] || '');
     } catch (e) {
       setError(getApiErrorMessage(e));
     } finally {
@@ -233,9 +238,13 @@ export default function RoasterDashboardPage() {
   async function requestTransfer(batchId: string) {
     setError('');
     setMessage('');
+    if (!selectedTransferTarget) {
+      setError('Vui lòng chọn tổ chức đích chuyển giao.');
+      return;
+    }
     try {
-      await dashboardApi.requestTransfer(batchId);
-      setMessage('Đã gửi yêu cầu chuyển giao sang Org2MSP.');
+      await dashboardApi.requestTransfer(batchId, selectedTransferTarget);
+      setMessage(`Đã gửi yêu cầu chuyển giao đến ${selectedTransferTarget}.`);
       await refresh();
     } catch (e) {
       setError(getApiErrorMessage(e));
@@ -393,6 +402,9 @@ export default function RoasterDashboardPage() {
                       <span className="text-xs text-slate-500">Trạng thái</span>
                       <StatusBadge status={item.status} />
                     </div>
+                    {item.status === 'TRANSFER_PENDING' && (
+                      <p className="mt-1 text-xs text-amber-700">Tổ chức đích: {item.pendingToMsp ?? 'Org2MSP'}</p>
+                    )}
                     <p className="mt-2 text-xs text-slate-600">
                       Minh chứng: {item.evidenceHash ? 'Đã có minh chứng' : 'Chưa có minh chứng'}
                     </p>
@@ -437,6 +449,11 @@ export default function RoasterDashboardPage() {
                         <td className="px-2 py-2"><StatusBadge status={item.status} /></td>
                         <td className="px-2 py-2 text-xs text-slate-600">
                           {item.evidenceHash ? 'Đã có minh chứng' : 'Chưa có minh chứng'}
+                          {item.status === 'TRANSFER_PENDING' && (
+                            <span className="ml-2 rounded-md bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
+                              Đích: {item.pendingToMsp ?? 'Org2MSP'}
+                            </span>
+                          )}
                           {item.evidenceUri && (
                             <a
                               href={toEvidenceUrl(item.evidenceUri)}
@@ -508,11 +525,37 @@ export default function RoasterDashboardPage() {
             {detailLoading && <LoadingState text="Đang tải chi tiết lô..." />}
             {!detailLoading && detailError && <ErrorState message={detailError} />}
             {!detailLoading && !detailError && detailTrace && (
-              <TraceTimeline
-                batches={[...detailTrace.parentChain, detailTrace.batch]}
-                farmActivities={detailTrace.farmActivities}
-                ledgerRefs={detailTrace.ledgerRefs}
-              />
+              <>
+                <TraceTimeline
+                  batches={[...detailTrace.parentChain, detailTrace.batch]}
+                  farmActivities={detailTrace.farmActivities}
+                  ledgerRefs={detailTrace.ledgerRefs}
+                />
+                {detailTrace.batch.type === 'ROAST' && detailTrace.batch.status === 'COMPLETED' && (
+                  <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2">
+                    <select
+                      value={selectedTransferTarget}
+                      onChange={(e) => setSelectedTransferTarget(e.target.value)}
+                      className="min-w-[180px] rounded-md border border-amber-200 bg-white px-2 py-1 text-xs text-amber-900"
+                    >
+                      {transferTargets.length === 0 && <option value="">Không có tổ chức đích</option>}
+                      {transferTargets.map((target) => (
+                        <option key={target} value={target}>
+                          {target}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      disabled={!selectedTransferTarget}
+                      onClick={() => void requestTransfer(detailTrace.batch.batchId)}
+                      className="rounded-md bg-amber-100 px-3 py-2 text-xs font-medium text-amber-700 hover:bg-amber-200 disabled:opacity-50"
+                    >
+                      Yêu cầu chuyển giao
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
