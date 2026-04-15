@@ -8,4 +8,6 @@ import java.util.List;
 public interface FarmActivityRepository extends JpaRepository<FarmActivityEntity, Long> {
 
     List<FarmActivityEntity> findByHarvestBatchIdOrderByActivityDateAsc(String harvestBatchId);
+
+    boolean existsByTxId(String txId);
 }

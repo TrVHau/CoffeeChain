@@ -1,11 +1,13 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { DashboardShell } from '@/components/dashboard/DashboardShell';
 import { EmptyState, ErrorState, LoadingState } from '@/components/dashboard/UiState';
 import { StatusBadge } from '@/components/dashboard/StatusBadge';
 import { dashboardApi, getApiErrorMessage, type CreateProcessedInput } from '@/lib/api/dashboardApi';
 import { TraceTimeline } from '@/components/TraceTimeline';
+import { QrScanner } from '@/components/QrScanner';
 import type { BatchResponse, BatchStatus, TraceResponse } from '@/lib/api/types';
 import { useRoleGuard } from '@/lib/auth/useRoleGuard';
 
@@ -18,7 +20,31 @@ const INITIAL_FORM: CreateProcessedInput = {
   weightKg: '',
 };
 
+function getTodayDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function buildInitialForm(): CreateProcessedInput {
+  return {
+    ...INITIAL_FORM,
+    startDate: getTodayDate(),
+  };
+}
+
 const METHODS = ['Washed', 'Natural', 'Honey'] as const;
+
+function isMetadataEmpty(batch: BatchResponse): boolean {
+  return !batch.metadata || Object.keys(batch.metadata).length === 0;
+}
+
+function pickMetadataValue(batch: BatchResponse | null, keys: string[]): string {
+  if (!batch?.metadata) return '—';
+  for (const key of keys) {
+    const value = batch.metadata[key];
+    if (value && value.trim()) return value;
+  }
+  return '—';
+}
 
 function canMoveTo(current: BatchStatus, next: BatchStatus): boolean {
   if (current === 'CREATED' && (next === 'IN_PROCESS' || next === 'COMPLETED')) return true;
@@ -26,21 +52,31 @@ function canMoveTo(current: BatchStatus, next: BatchStatus): boolean {
   return false;
 }
 
+const PAGE_SIZE = 10;
+
 export default function ProcessorDashboardPage() {
   const { ready } = useRoleGuard('PROCESSOR');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [form, setForm] = useState<CreateProcessedInput>(INITIAL_FORM);
+  const [form, setForm] = useState<CreateProcessedInput>(buildInitialForm());
+  const [sourceCodeInput, setSourceCodeInput] = useState('');
+  const [resolvingSource, setResolvingSource] = useState(false);
+  const [sourceResolved, setSourceResolved] = useState<BatchResponse | null>(null);
+  const [showScanner, setShowScanner] = useState(false);
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [processed, setProcessed] = useState<BatchResponse[]>([]);
-  const [harvestParents, setHarvestParents] = useState<BatchResponse[]>([]);
+  const [facilityOptions, setFacilityOptions] = useState<string[]>([]);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
   const [selectedCode, setSelectedCode] = useState('');
   const [detailTrace, setDetailTrace] = useState<TraceResponse | null>(null);
+  const [page, setPage] = useState(1);
+
+  const totalPages = Math.max(1, Math.ceil(processed.length / PAGE_SIZE));
+  const pagedProcessed = processed.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   useEffect(() => {
     if (!message) return;
@@ -52,16 +88,29 @@ export default function ProcessorDashboardPage() {
     setLoading(true);
     setError('');
     try {
-      const [processedList, harvestList] = await Promise.all([
+      const [processedList, accountOptions] = await Promise.all([
         dashboardApi.getList({ type: 'PROCESSED' }),
-        dashboardApi.getList({ type: 'HARVEST', status: 'COMPLETED' }),
+        dashboardApi.getAccountOptions(),
       ]);
-      setProcessed(processedList);
-      setHarvestParents(harvestList);
-      setForm((prev) => ({
-        ...prev,
-        parentBatchId: prev.parentBatchId || harvestList[0]?.batchId || '',
-      }));
+
+      setFacilityOptions(accountOptions.processingFacilities);
+      if (!form.facilityName && accountOptions.processingFacilities.length > 0) {
+        setForm((prev) => ({ ...prev, facilityName: accountOptions.processingFacilities[0] }));
+      }
+
+      const processedEnriched = await Promise.all(
+        processedList.map(async (item) => {
+          if (!isMetadataEmpty(item)) return item;
+          try {
+            const chainBatch = await dashboardApi.getBatchByIdChain(item.batchId);
+            return { ...item, metadata: chainBatch.metadata };
+          } catch {
+            return item;
+          }
+        }),
+      );
+
+      setProcessed(processedEnriched);
     } catch (e) {
       setError(getApiErrorMessage(e));
     } finally {
@@ -74,8 +123,16 @@ export default function ProcessorDashboardPage() {
     void refresh();
   }, [ready]);
 
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
+    if (!form.parentBatchId) {
+      setError('Vui lòng quét mã QR hoặc nhập mã lô để xác định Harvest nguồn trước khi tạo.');
+      return;
+    }
     if (!evidenceFile) {
       setError('Vui lòng chọn ảnh minh chứng trước khi tạo Processed batch.');
       return;
@@ -84,12 +141,17 @@ export default function ProcessorDashboardPage() {
     setError('');
     setMessage('');
     try {
-      const created = await dashboardApi.createProcessed(form);
+      const created = await dashboardApi.createProcessed({
+        ...form,
+        startDate: getTodayDate(),
+      });
       const evidence = await dashboardApi.uploadEvidence(evidenceFile);
       await dashboardApi.addProcessedEvidence(created.batchId, evidence);
-      setForm((p) => ({ ...INITIAL_FORM, parentBatchId: p.parentBatchId }));
+      setForm((prev) => ({ ...buildInitialForm(), facilityName: prev.facilityName }));
+      setSourceCodeInput('');
+      setSourceResolved(null);
       setEvidenceFile(null);
-      setMessage('Tạo Processed batch thành công.');
+      setMessage('Tạo Processed batch và cập nhật minh chứng thành công.');
       await refresh();
     } catch (e) {
       setError(getApiErrorMessage(e));
@@ -102,12 +164,76 @@ export default function ProcessorDashboardPage() {
     setError('');
     setMessage('');
     try {
-      await dashboardApi.updateProcessedStatus(batchId, newStatus);
+      if (newStatus === 'COMPLETED') {
+        const finalWeightKg = window.prompt('Nhập khối lượng thực tế (kg) sau khi hoàn thành:', '');
+        if (!finalWeightKg || !finalWeightKg.trim()) {
+          setError('Bạn cần nhập khối lượng thực tế để hoàn thành batch.');
+          return;
+        }
+        await dashboardApi.updateProcessedStatusWithWeight(batchId, newStatus, finalWeightKg.trim());
+      } else {
+        await dashboardApi.updateProcessedStatus(batchId, newStatus);
+      }
       setMessage(`Đã cập nhật trạng thái -> ${newStatus}.`);
       await refresh();
     } catch (e) {
       setError(getApiErrorMessage(e));
     }
+  }
+
+  function extractCode(raw: string): string {
+    const value = raw.trim();
+    const match = value.match(/\/trace\/([^/?#\s]+)/);
+    return match ? match[1] : value;
+  }
+
+  async function resolveHarvestSource(rawInput?: string) {
+    const code = extractCode(rawInput ?? sourceCodeInput);
+    if (!code) {
+      setError('Vui lòng nhập mã truy xuất hoặc URL QR hợp lệ.');
+      return;
+    }
+
+    setResolvingSource(true);
+    setError('');
+    try {
+      const trace = await dashboardApi.getTrace(code);
+      const chain = [...(trace.parentChain ?? []), trace.batch].filter(Boolean) as BatchResponse[];
+      const harvest = chain.find((batch) => batch.type === 'HARVEST');
+
+      if (!harvest) {
+        throw new Error('Không truy được Harvest nguồn từ mã đã nhập/quét.');
+      }
+      if (harvest.status !== 'COMPLETED') {
+        throw new Error('Harvest nguồn chưa COMPLETED, chưa thể tạo Processed batch.');
+      }
+
+      let resolvedHarvest = harvest;
+      if (isMetadataEmpty(harvest)) {
+        try {
+          const chainBatch = await dashboardApi.getBatchByIdChain(harvest.batchId);
+          resolvedHarvest = { ...harvest, metadata: chainBatch.metadata };
+        } catch {
+          resolvedHarvest = harvest;
+        }
+      }
+
+      setSourceResolved(resolvedHarvest);
+      setForm((prev) => ({ ...prev, parentBatchId: harvest.batchId }));
+      setMessage('Đã xác định Harvest nguồn từ mã truy xuất.');
+    } catch (e) {
+      setSourceResolved(null);
+      setForm((prev) => ({ ...prev, parentBatchId: '' }));
+      setError(getApiErrorMessage(e));
+    } finally {
+      setResolvingSource(false);
+    }
+  }
+
+  function handleQrDetected(code: string) {
+    setSourceCodeInput(code);
+    setShowScanner(false);
+    void resolveHarvestSource(code);
   }
 
   async function openDetail(publicCode: string) {
@@ -135,20 +261,54 @@ export default function ProcessorDashboardPage() {
           <h2 className="text-base font-semibold text-amber-900">Tạo Processed batch</h2>
           <form onSubmit={handleCreate} className="mt-4 space-y-3">
             <label className="block text-sm">
-              <span className="mb-1 block font-medium text-slate-700">Harvest nguồn</span>
-              <select
+              <span className="mb-1 block font-medium text-slate-700">Mã truy xuất nguồn (quét QR hoặc nhập tay)</span>
+              <div className="flex gap-2">
+                <input
+                  value={sourceCodeInput}
+                  onChange={(e) => setSourceCodeInput(e.target.value)}
+                  placeholder="VD: HAR-20260414-173331-WP6VWS hoặc URL /trace/..."
+                  className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
+                />
+                <button
+                  type="button"
+                  onClick={() => void resolveHarvestSource()}
+                  disabled={resolvingSource}
+                  className="rounded-lg border border-amber-200 px-3 py-2 text-sm text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                >
+                  {resolvingSource ? 'Đang tra...' : 'Tra mã'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowScanner((prev) => !prev)}
+                  className="rounded-lg border border-amber-200 px-3 py-2 text-sm text-amber-700 hover:bg-amber-50"
+                >
+                  {showScanner ? 'Ẩn quét QR' : 'Quét QR'}
+                </button>
+              </div>
+            </label>
+
+            {showScanner && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                <QrScanner onCodeDetected={handleQrDetected} autoNavigate={false} />
+              </div>
+            )}
+
+            {sourceResolved && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                <p><span className="font-semibold">Harvest nguồn:</span> {sourceResolved.publicCode}</p>
+                <p><span className="font-semibold">Nơi trồng:</span> {pickMetadataValue(sourceResolved, ['farmLocation', 'farm_location', 'location', 'origin'])}</p>
+                <p><span className="font-semibold">Giống:</span> {pickMetadataValue(sourceResolved, ['coffeeVariety', 'coffee_variety', 'variety'])}</p>
+                <p><span className="font-semibold">ID liên kết:</span> {sourceResolved.batchId}</p>
+              </div>
+            )}
+
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium text-slate-700">Harvest nguồn đã xác định</span>
+              <input
                 value={form.parentBatchId}
-                onChange={(e) => setForm((p) => ({ ...p, parentBatchId: e.target.value }))}
-                required
-                className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
-              >
-                {harvestParents.length === 0 && <option value="">Không có parent hợp lệ</option>}
-                {harvestParents.map((item) => (
-                  <option key={item.batchId} value={item.batchId}>
-                    {item.publicCode} - {item.batchId.slice(0, 8)}
-                  </option>
-                ))}
-              </select>
+                readOnly
+                className="w-full rounded-lg border border-amber-200 bg-slate-50 px-3 py-2 text-xs font-mono text-slate-700"
+              />
             </label>
             <label className="block text-sm">
               <span className="mb-1 block font-medium text-slate-700">Phương pháp sơ chế</span>
@@ -161,45 +321,36 @@ export default function ProcessorDashboardPage() {
               </select>
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block font-medium text-slate-700">Ngày bắt đầu</span>
+              <span className="mb-1 block font-medium text-slate-700">Ngày bắt đầu (tự động)</span>
               <input
-                type="date"
+                type="text"
                 value={form.startDate}
-                onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))}
-                required
+                readOnly
                 className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
               />
             </label>
-            <label className="block text-sm">
-              <span className="mb-1 block font-medium text-slate-700">Ngày kết thúc</span>
-              <input
-                type="date"
-                value={form.endDate}
-                onChange={(e) => setForm((p) => ({ ...p, endDate: e.target.value }))}
-                required
-                className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
-              />
-            </label>
+            <div className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Ngày kết thúc sẽ tự động cập nhật khi bạn chuyển trạng thái lô sang COMPLETED.
+            </div>
             <label className="block text-sm">
               <span className="mb-1 block font-medium text-slate-700">Tên cơ sở sơ chế</span>
-              <input
+              <select
                 value={form.facilityName}
                 onChange={(e) => setForm((p) => ({ ...p, facilityName: e.target.value }))}
                 required
                 className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
-              />
+              >
+                {facilityOptions.length === 0 && <option value="">Không có cơ sở hợp lệ</option>}
+                {facilityOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
             </label>
             <label className="block text-sm">
               <span className="mb-1 block font-medium text-slate-700">Khối lượng (kg)</span>
-              <input
-                type="number"
-                min="0.1"
-                step="0.1"
-                value={form.weightKg}
-                onChange={(e) => setForm((p) => ({ ...p, weightKg: e.target.value }))}
-                required
-                className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
-              />
+              <div className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Khối lượng sẽ được nhập ở bước chuyển trạng thái sang COMPLETED.
+              </div>
             </label>
             <label className="block text-sm">
               <span className="mb-1 block font-medium text-slate-700">Ảnh minh chứng</span>
@@ -214,7 +365,7 @@ export default function ProcessorDashboardPage() {
             {evidenceFile && <p className="text-xs text-slate-500">Đã chọn: {evidenceFile.name}</p>}
             <button
               type="submit"
-              disabled={submitting || harvestParents.length === 0}
+              disabled={submitting || !form.parentBatchId || !form.facilityName}
               className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4" aria-hidden="true">
@@ -248,46 +399,22 @@ export default function ProcessorDashboardPage() {
           {!loading && !error && processed.length > 0 && (
             <>
               <div className="space-y-3 md:hidden">
-                {processed.map((item) => (
+                {pagedProcessed.map((item) => (
                   <article key={item.batchId} className="rounded-xl border border-amber-100 bg-amber-50/40 p-3">
                     <p className="font-mono text-xs text-slate-700">{item.publicCode}</p>
+                    <p className="mt-1 text-xs text-slate-700"><span className="font-medium">Cơ sở:</span> {item.metadata?.facilityName ?? 'Chưa có dữ liệu'}</p>
+                    <p className="mt-1 text-xs text-slate-600"><span className="font-medium">Phương pháp:</span> {item.metadata?.processingMethod ?? 'Chưa có dữ liệu'}</p>
                     <div className="mt-2 flex items-center justify-between">
                       <span className="text-xs text-slate-500">Trạng thái</span>
                       <StatusBadge status={item.status} />
                     </div>
                     <p className="mt-2 text-xs text-slate-600">Cập nhật: {new Date(item.updatedAt).toLocaleString('vi-VN')}</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {canMoveTo(item.status, 'IN_PROCESS') && (
-                        <button
-                          type="button"
-                          onClick={() => void updateStatus(item.batchId, 'IN_PROCESS')}
-                          className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-200"
-                        >
-                          IN_PROCESS
-                        </button>
-                      )}
-                      {canMoveTo(item.status, 'COMPLETED') && (
-                        <button
-                          type="button"
-                          onClick={() => void updateStatus(item.batchId, 'COMPLETED')}
-                          className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-200"
-                        >
-                          COMPLETED
-                        </button>
-                      )}
-                      {!canMoveTo(item.status, 'IN_PROCESS') && !canMoveTo(item.status, 'COMPLETED') && (
-                        <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
-                          Không có thao tác
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => void openDetail(item.publicCode)}
-                        className="inline-flex items-center justify-center whitespace-nowrap rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-200"
-                      >
-                        Xem chi tiết
-                      </button>
-                    </div>
+                    <Link
+                      href={`/dashboard/processor/update?batchId=${encodeURIComponent(item.batchId)}`}
+                      className="mt-3 inline-flex items-center justify-center whitespace-nowrap rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-200"
+                    >
+                      Xem chi tiết
+                    </Link>
                   </article>
                 ))}
               </div>
@@ -296,66 +423,57 @@ export default function ProcessorDashboardPage() {
                 <table className="min-w-[760px] text-sm">
                   <thead>
                     <tr className="border-b border-amber-100 text-left text-slate-500">
+                      <th className="px-2 py-2 font-medium">Cơ sở sơ chế</th>
+                      <th className="px-2 py-2 font-medium">Phương pháp</th>
                       <th className="px-2 py-2 font-medium">Mã công khai</th>
                       <th className="px-2 py-2 font-medium">Trạng thái</th>
                       <th className="px-2 py-2 font-medium">Cập nhật</th>
-                      <th className="px-2 py-2 font-medium">Thao tác</th>
                       <th className="px-2 py-2 font-medium">Chi tiết</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {processed.map((item) => (
+                    {pagedProcessed.map((item) => (
                       <tr key={item.batchId} className="border-b border-amber-50">
+                        <td className="px-2 py-2 text-xs text-slate-700">{item.metadata?.facilityName ?? '—'}</td>
+                        <td className="px-2 py-2 text-xs text-slate-700">{item.metadata?.processingMethod ?? '—'}</td>
                         <td className="px-2 py-2 font-mono text-xs text-slate-700">{item.publicCode}</td>
                         <td className="px-2 py-2"><StatusBadge status={item.status} /></td>
                         <td className="px-2 py-2 text-slate-600">{new Date(item.updatedAt).toLocaleString('vi-VN')}</td>
                         <td className="px-2 py-2">
-                          <div className="flex flex-wrap gap-2">
-                            {canMoveTo(item.status, 'IN_PROCESS') && (
-                              <button
-                                type="button"
-                                onClick={() => void updateStatus(item.batchId, 'IN_PROCESS')}
-                                className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-200"
-                              >
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-3.5 w-3.5" aria-hidden="true">
-                                  <path d="M12 3v4M12 17v4M3 12h4M17 12h4" />
-                                </svg>
-                                IN_PROCESS
-                              </button>
-                            )}
-                            {canMoveTo(item.status, 'COMPLETED') && (
-                              <button
-                                type="button"
-                                onClick={() => void updateStatus(item.batchId, 'COMPLETED')}
-                                className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-200"
-                              >
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-3.5 w-3.5" aria-hidden="true">
-                                  <path d="M5 12l4 4 10-10" />
-                                </svg>
-                                COMPLETED
-                              </button>
-                            )}
-                            {!canMoveTo(item.status, 'IN_PROCESS') && !canMoveTo(item.status, 'COMPLETED') && (
-                              <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
-                                Không có thao tác
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-2 py-2">
-                          <button
-                            type="button"
-                            onClick={() => void openDetail(item.publicCode)}
+                          <Link
+                            href={`/dashboard/processor/update?batchId=${encodeURIComponent(item.batchId)}`}
                             className="inline-flex items-center justify-center whitespace-nowrap rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-200"
                           >
                             Xem chi tiết
-                          </button>
+                          </Link>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+
+              {totalPages > 1 && (
+                <div className="mt-4 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    disabled={page === 1}
+                    onClick={() => setPage((current) => Math.max(1, current - 1))}
+                    className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                  >
+                    Trang trước
+                  </button>
+                  <span className="text-xs text-slate-600">Trang {page}/{totalPages}</span>
+                  <button
+                    type="button"
+                    disabled={page === totalPages}
+                    onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                    className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                  >
+                    Trang sau
+                  </button>
+                </div>
+              )}
             </>
           )}
         </section>

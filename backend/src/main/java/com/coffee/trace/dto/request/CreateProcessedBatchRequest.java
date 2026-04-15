@@ -8,7 +8,7 @@ public class CreateProcessedBatchRequest {
     @NotBlank private String parentBatchId;
     @NotBlank private String processingMethod;  // Washed | Natural | Honey
     @NotBlank private String startDate;
-    @NotBlank private String endDate;
+    private String endDate;
     @NotBlank private String facilityName;
-    @NotBlank private String weightKg;
+    private String weightKg;
 }

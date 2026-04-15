@@ -4,8 +4,10 @@ import com.coffee.trace.dto.request.AddEvidenceRequest;
 import com.coffee.trace.dto.request.CreateHarvestBatchRequest;
 import com.coffee.trace.dto.request.RecordFarmActivityRequest;
 import com.coffee.trace.dto.request.UpdateStatusRequest;
+import com.coffee.trace.service.AccountOptionsService;
 import com.coffee.trace.service.FabricGatewayService;
 import com.coffee.trace.service.PublicCodeService;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -22,13 +24,16 @@ public class FarmerController {
 
     private final FabricGatewayService fabricGateway;
     private final PublicCodeService    publicCodeService;
+    private final AccountOptionsService accountOptionsService;
     private final ObjectMapper         objectMapper;
 
     public FarmerController(FabricGatewayService fabricGateway,
                             PublicCodeService publicCodeService,
+                            AccountOptionsService accountOptionsService,
                             ObjectMapper objectMapper) {
         this.fabricGateway    = fabricGateway;
         this.publicCodeService = publicCodeService;
+        this.accountOptionsService = accountOptionsService;
         this.objectMapper     = objectMapper;
     }
 
@@ -37,6 +42,13 @@ public class FarmerController {
     @PreAuthorize("hasRole('FARMER')")
     public ResponseEntity<?> createHarvest(@AuthenticationPrincipal String userId,
                                            @Valid @RequestBody CreateHarvestBatchRequest req) throws Exception {
+        if (!accountOptionsService.isAllowedFarmLocation(userId, req.getFarmLocation())) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "Địa điểm nông trại không hợp lệ cho tài khoản hiện tại.",
+                "allowedFarmLocations", accountOptionsService.getFarmLocations(userId)
+            ));
+        }
+
         String publicCode = publicCodeService.generateForType("HARVEST");
         byte[] result = fabricGateway.submitAs(
                 userId,
@@ -45,7 +57,7 @@ public class FarmerController {
                 req.getFarmLocation(),
                 req.getHarvestDate(),
                 req.getCoffeeVariety(),
-                req.getWeightKg()
+            req.getWeightKg() != null ? req.getWeightKg() : ""
         );
         return ResponseEntity.ok(toResponse(result, "createHarvestBatch"));
     }
@@ -56,6 +68,17 @@ public class FarmerController {
     public ResponseEntity<?> recordActivity(@AuthenticationPrincipal String userId,
                                             @PathVariable String id,
                                             @Valid @RequestBody RecordFarmActivityRequest req) throws Exception {
+        byte[] batchRaw = fabricGateway.evaluateTransaction("Org1", "getBatch", id);
+        Map<String, Object> batch = objectMapper.readValue(batchRaw, new TypeReference<Map<String, Object>>() {});
+        String status = String.valueOf(batch.getOrDefault("status", ""));
+        if (!"CREATED".equalsIgnoreCase(status) && !"IN_PROCESS".equalsIgnoreCase(status)) {
+            return ResponseEntity.status(409).body(Map.of(
+                "error", "Harvest batch is already completed. Farm activity can only be added when status is CREATED or IN_PROCESS.",
+                "batchId", id,
+                "currentStatus", status
+            ));
+        }
+
         byte[] result = fabricGateway.submitAs(userId, "recordFarmActivity",
                 id,
                 req.getActivityType(),
@@ -74,7 +97,7 @@ public class FarmerController {
                                          @Valid @RequestBody AddEvidenceRequest req) throws Exception {
         byte[] result = fabricGateway.submitAs(userId, "addEvidence",
                 id, req.getEvidenceHash(), req.getEvidenceUri());
-        return ResponseEntity.ok(objectMapper.readValue(result, Map.class));
+        return ResponseEntity.ok(toResponse(result, "addEvidence"));
     }
 
     /** PATCH /api/harvest/{id}/status — update HarvestBatch status */
@@ -84,6 +107,16 @@ public class FarmerController {
                                           @PathVariable String id,
                                           @Valid @RequestBody UpdateStatusRequest req) throws Exception {
         byte[] result = fabricGateway.submitAs(userId, "updateBatchStatus", id, req.getNewStatus());
+
+        if ("COMPLETED".equalsIgnoreCase(req.getNewStatus())) {
+            if (req.getFinalWeightKg() == null || req.getFinalWeightKg().isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "error", "Vui lòng nhập khối lượng thực tế khi hoàn thành batch."
+                ));
+            }
+            fabricGateway.submitAs(userId, "setBatchFinalWeight", id, req.getFinalWeightKg());
+        }
+
         return ResponseEntity.ok(toResponse(result, "updateBatchStatus"));
     }
 
@@ -97,6 +130,6 @@ public class FarmerController {
             return Map.of("status", "SUCCESS", "action", action);
         }
 
-        return objectMapper.readValue(payload, Map.class);
+        return objectMapper.readValue(payload, new TypeReference<Map<String, Object>>() {});
     }
 }

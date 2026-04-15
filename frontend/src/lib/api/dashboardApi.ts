@@ -145,7 +145,7 @@ export interface CreateHarvestInput {
   farmLocation: string;
   harvestDate: string;
   coffeeVariety: string;
-  weightKg: string;
+  weightKg?: string;
 }
 
 export interface CreateProcessedInput {
@@ -154,7 +154,7 @@ export interface CreateProcessedInput {
   startDate: string;
   endDate: string;
   facilityName: string;
-  weightKg: string;
+  weightKg?: string;
 }
 
 export interface CreateRoastInput {
@@ -162,7 +162,12 @@ export interface CreateRoastInput {
   roastProfile: string;
   roastDate: string;
   roastDurationMinutes: string;
-  weightKg: string;
+  weightKg?: string;
+}
+
+export interface AccountOptions {
+  farmLocations: string[];
+  processingFacilities: string[];
 }
 
 export interface CreatePackagedInput {
@@ -291,6 +296,22 @@ async function updateHarvestStatus(batchId: string, newStatus: BatchStatus): Pro
   }
 }
 
+async function updateHarvestStatusWithWeight(
+  batchId: string,
+  newStatus: BatchStatus,
+  finalWeightKg?: string,
+): Promise<BatchResponse> {
+  try {
+    const res = await apiClient.patch<unknown>(`/api/harvest/${encodeURIComponent(batchId)}/status`, { newStatus, finalWeightKg });
+    return normalizeBatch(res.data);
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockUpdateHarvestStatus(batchId, newStatus);
+    }
+    throw error;
+  }
+}
+
 async function addHarvestEvidence(batchId: string, input: AddEvidenceInput): Promise<BatchResponse> {
   try {
     const res = await apiClient.post<unknown>(`/api/harvest/${encodeURIComponent(batchId)}/evidence`, input);
@@ -327,6 +348,22 @@ async function updateProcessedStatus(batchId: string, newStatus: BatchStatus): P
   }
 }
 
+async function updateProcessedStatusWithWeight(
+  batchId: string,
+  newStatus: BatchStatus,
+  finalWeightKg?: string,
+): Promise<BatchResponse> {
+  try {
+    const res = await apiClient.patch<unknown>(`/api/process/${encodeURIComponent(batchId)}/status`, { newStatus, finalWeightKg });
+    return normalizeBatch(res.data);
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockUpdateProcessedStatus(batchId, newStatus);
+    }
+    throw error;
+  }
+}
+
 async function createRoast(input: CreateRoastInput): Promise<BatchResponse> {
   try {
     const res = await apiClient.post<unknown>('/api/roast', input);
@@ -346,6 +383,43 @@ async function updateRoastStatus(batchId: string, newStatus: BatchStatus): Promi
   } catch (error) {
     if (isOfflineError(error)) {
       return mockUpdateRoastStatus(batchId, newStatus);
+    }
+    throw error;
+  }
+}
+
+async function updateRoastStatusWithWeight(
+  batchId: string,
+  newStatus: BatchStatus,
+  finalWeightKg?: string,
+  roastDurationMinutes?: string,
+): Promise<BatchResponse> {
+  try {
+    const res = await apiClient.patch<unknown>(`/api/roast/${encodeURIComponent(batchId)}/status`, {
+      newStatus,
+      finalWeightKg,
+      roastDurationMinutes,
+    });
+    return normalizeBatch(res.data);
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return mockUpdateRoastStatus(batchId, newStatus);
+    }
+    throw error;
+  }
+}
+
+async function getAccountOptions(): Promise<AccountOptions> {
+  try {
+    const res = await apiClient.get<unknown>('/api/account/options');
+    const row = (res.data ?? {}) as Record<string, unknown>;
+    return {
+      farmLocations: Array.isArray(row.farmLocations) ? row.farmLocations.map((item) => asString(item)).filter(Boolean) : [],
+      processingFacilities: Array.isArray(row.processingFacilities) ? row.processingFacilities.map((item) => asString(item)).filter(Boolean) : [],
+    };
+  } catch (error) {
+    if (isOfflineError(error)) {
+      return { farmLocations: [], processingFacilities: [] };
     }
     throw error;
   }
@@ -479,11 +553,14 @@ export const dashboardApi = {
   createHarvest,
   recordFarmActivity,
   updateHarvestStatus,
+  updateHarvestStatusWithWeight,
   addHarvestEvidence,
   createProcessed,
   updateProcessedStatus,
+  updateProcessedStatusWithWeight,
   createRoast,
   updateRoastStatus,
+  updateRoastStatusWithWeight,
   addEvidence,
   addProcessedEvidence,
   addPackagedEvidence,
@@ -491,6 +568,7 @@ export const dashboardApi = {
   requestTransfer,
   acceptTransfer,
   createPackaged,
+  getAccountOptions,
   updateRetailStatus,
   getPackagedQrUrl,
 };

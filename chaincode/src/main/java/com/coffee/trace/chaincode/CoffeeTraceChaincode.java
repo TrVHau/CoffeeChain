@@ -77,6 +77,25 @@ public class CoffeeTraceChaincode implements ContractInterface {
         ));
     }
 
+    private byte[] buildWeightPayload(Context ctx,
+            Batch b, String weightKey, String weightValue) {
+        return JSON.serializeMap(stableEventMap(
+            "batchId", b.getBatchId(),
+            "weightKey", weightKey,
+            "weightValue", weightValue,
+            "txId", ctx.getStub().getTxId()
+        ));
+    }
+
+    private byte[] buildRoastDurationPayload(Context ctx,
+            Batch b, String roastDurationMinutes) {
+        return JSON.serializeMap(stableEventMap(
+            "batchId", b.getBatchId(),
+            "roastDurationMinutes", roastDurationMinutes,
+            "txId", ctx.getStub().getTxId()
+        ));
+    }
+
     private Batch buildBatch(Context ctx, String publicCode,
             String type, String parentBatchId,
             Map<String, String> metadata) {
@@ -371,6 +390,61 @@ public class CoffeeTraceChaincode implements ContractInterface {
         ctx.getStub().putState(batchId, JSON.serialize(b));
         ctx.getStub().setEvent("EVIDENCE_ADDED",
             buildEvidencePayload(ctx, b));
+    }
+
+    @Transaction
+    public void setBatchFinalWeight(Context ctx,
+            String batchId, String finalWeightKg) {
+
+        Batch b = LedgerUtils.getBatchOrThrow(ctx, batchId);
+
+        if (!b.getOwnerMSP().equals(ctx.getClientIdentity().getMSPID())) {
+            throw new ChaincodeException("Only current owner can set final weight");
+        }
+        if (!"COMPLETED".equals(b.getStatus())) {
+            throw new ChaincodeException("Final weight can only be set when batch is COMPLETED");
+        }
+        if (finalWeightKg == null || finalWeightKg.isBlank()) {
+            throw new ChaincodeException("finalWeightKg must not be empty");
+        }
+
+        String weightKey = "PACKAGED".equals(b.getType()) ? "packageWeight" : "weightKg";
+        Map<String, String> metadata = b.getMetadata() != null ? b.getMetadata() : new TreeMap<>();
+        metadata.put(weightKey, finalWeightKg);
+        b.setMetadata(metadata);
+        b.setUpdatedAt(LedgerUtils.now(ctx));
+
+        ctx.getStub().putState(batchId, JSON.serialize(b));
+        ctx.getStub().setEvent("BATCH_WEIGHT_UPDATED", buildWeightPayload(ctx, b, weightKey, finalWeightKg));
+    }
+
+    @Transaction
+    public void setRoastDurationMinutes(Context ctx,
+            String batchId, String roastDurationMinutes) {
+
+        Batch b = LedgerUtils.getBatchOrThrow(ctx, batchId);
+
+        if (!"ROAST".equals(b.getType())) {
+            throw new ChaincodeException("Only ROAST batch supports roastDurationMinutes");
+        }
+        if (!b.getOwnerMSP().equals(ctx.getClientIdentity().getMSPID())) {
+            throw new ChaincodeException("Only current owner can set roast duration");
+        }
+        if (!"COMPLETED".equals(b.getStatus())) {
+            throw new ChaincodeException("Roast duration can only be set when batch is COMPLETED");
+        }
+        if (roastDurationMinutes == null || roastDurationMinutes.isBlank()) {
+            throw new ChaincodeException("roastDurationMinutes must not be empty");
+        }
+
+        Map<String, String> metadata = b.getMetadata() != null ? b.getMetadata() : new TreeMap<>();
+        metadata.put("roastDurationMinutes", roastDurationMinutes);
+        b.setMetadata(metadata);
+        b.setUpdatedAt(LedgerUtils.now(ctx));
+
+        ctx.getStub().putState(batchId, JSON.serialize(b));
+        ctx.getStub().setEvent("BATCH_ROAST_DURATION_UPDATED",
+            buildRoastDurationPayload(ctx, b, roastDurationMinutes));
     }
 
     // ══════════════════════════════════════════════════════════

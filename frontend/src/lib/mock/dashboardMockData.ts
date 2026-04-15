@@ -180,7 +180,7 @@ export function mockCreateHarvest(input: CreateHarvestInput): BatchResponse {
             farmLocation: input.farmLocation,
             harvestDate: input.harvestDate,
             coffeeVariety: input.coffeeVariety,
-            weightKg: input.weightKg,
+            weightKg: input.weightKg ?? '',
         },
     };
     state.ledgerRefs.unshift(makeLedgerRef('BATCH_CREATED', batch.batchId));
@@ -206,7 +206,7 @@ export function mockCreateProcessed(input: CreateProcessedInput): BatchResponse 
             startDate: input.startDate,
             endDate: input.endDate,
             facilityName: input.facilityName,
-            weightKg: input.weightKg,
+            weightKg: input.weightKg ?? '',
         },
     };
     state.ledgerRefs.unshift(makeLedgerRef('BATCH_CREATED', batch.batchId));
@@ -231,7 +231,7 @@ export function mockCreateRoast(input: CreateRoastInput): BatchResponse {
             roastProfile: input.roastProfile,
             roastDate: input.roastDate,
             roastDurationMinutes: input.roastDurationMinutes,
-            weightKg: input.weightKg,
+            weightKg: input.weightKg ?? '',
         },
     };
     state.ledgerRefs.unshift(makeLedgerRef('BATCH_CREATED', batch.batchId));

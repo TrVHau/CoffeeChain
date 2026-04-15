@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { DashboardShell } from '@/components/dashboard/DashboardShell';
 import { EmptyState, ErrorState, LoadingState } from '@/components/dashboard/UiState';
@@ -8,6 +9,8 @@ import { dashboardApi, getApiErrorMessage } from '@/lib/api/dashboardApi';
 import { TraceTimeline } from '@/components/TraceTimeline';
 import type { BatchResponse, TraceResponse } from '@/lib/api/types';
 import { useRoleGuard } from '@/lib/auth/useRoleGuard';
+
+const PAGE_SIZE = 10;
 
 export default function RetailerDashboardPage() {
   const { ready } = useRoleGuard('RETAILER');
@@ -20,6 +23,10 @@ export default function RetailerDashboardPage() {
   const [detailError, setDetailError] = useState('');
   const [selectedCode, setSelectedCode] = useState('');
   const [detailTrace, setDetailTrace] = useState<TraceResponse | null>(null);
+  const [page, setPage] = useState(1);
+
+  const totalPages = Math.max(1, Math.ceil(packaged.length / PAGE_SIZE));
+  const pagedPackaged = packaged.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   useEffect(() => {
     if (!message) return;
@@ -44,6 +51,10 @@ export default function RetailerDashboardPage() {
     if (!ready) return;
     void refresh();
   }, [ready]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
 
   async function updateToInStock(batchId: string) {
     setError('');
@@ -124,7 +135,7 @@ export default function RetailerDashboardPage() {
         {!loading && !error && packaged.length > 0 && (
           <>
             <div className="space-y-3 md:hidden">
-              {packaged.map((item) => (
+              {pagedPackaged.map((item) => (
                 <article key={item.batchId} className="rounded-xl border border-amber-100 bg-amber-50/40 p-3">
                   <p className="font-mono text-xs text-slate-700">{item.publicCode}</p>
                   <div className="mt-2 flex items-center justify-between">
@@ -132,45 +143,12 @@ export default function RetailerDashboardPage() {
                     <StatusBadge status={item.status} />
                   </div>
                   <p className="mt-2 text-xs text-slate-600">Chủ sở hữu: {item.ownerMsp}</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void downloadQr(item.batchId)}
-                      className="rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-200"
-                    >
-                      Tải QR
-                    </button>
-                    {item.status === 'TRANSFERRED' && (
-                      <button
-                        type="button"
-                        onClick={() => void updateToInStock(item.batchId)}
-                        className="rounded-md bg-cyan-100 px-2 py-1 text-xs font-medium text-cyan-700 hover:bg-cyan-200"
-                      >
-                        IN_STOCK
-                      </button>
-                    )}
-                    {item.status === 'IN_STOCK' && (
-                      <button
-                        type="button"
-                        onClick={() => void updateToSold(item.batchId)}
-                        className="rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-200"
-                      >
-                        SOLD
-                      </button>
-                    )}
-                    {item.status !== 'TRANSFERRED' && item.status !== 'IN_STOCK' && (
-                      <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
-                        Không có thao tác
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => void openDetail(item.publicCode)}
-                      className="inline-flex items-center justify-center whitespace-nowrap rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-200"
+                    <Link
+                      href={`/dashboard/retailer/update?batchId=${encodeURIComponent(item.batchId)}`}
+                      className="mt-3 inline-flex items-center justify-center whitespace-nowrap rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-200"
                     >
                       Xem chi tiết
-                    </button>
-                  </div>
+                    </Link>
                 </article>
               ))}
             </div>
@@ -182,67 +160,50 @@ export default function RetailerDashboardPage() {
                     <th className="px-2 py-2 font-medium">Mã công khai</th>
                     <th className="px-2 py-2 font-medium">Trạng thái</th>
                     <th className="px-2 py-2 font-medium">Chủ sở hữu</th>
-                    <th className="px-2 py-2 font-medium">QR</th>
-                    <th className="px-2 py-2 font-medium">Thao tác</th>
                     <th className="px-2 py-2 font-medium">Chi tiết</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {packaged.map((item) => (
+                  {pagedPackaged.map((item) => (
                     <tr key={item.batchId} className="border-b border-amber-50">
                       <td className="px-2 py-2 font-mono text-xs text-slate-700">{item.publicCode}</td>
                       <td className="px-2 py-2"><StatusBadge status={item.status} /></td>
                       <td className="px-2 py-2 text-slate-600">{item.ownerMsp}</td>
                       <td className="px-2 py-2">
-                        <button
-                          type="button"
-                          onClick={() => void downloadQr(item.batchId)}
-                          className="rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-200"
-                        >
-                          Tải QR
-                        </button>
-                      </td>
-                      <td className="px-2 py-2">
-                        <div className="flex flex-wrap gap-2">
-                          {item.status === 'TRANSFERRED' && (
-                            <button
-                              type="button"
-                              onClick={() => void updateToInStock(item.batchId)}
-                              className="rounded-md bg-cyan-100 px-2 py-1 text-xs font-medium text-cyan-700 hover:bg-cyan-200"
-                            >
-                              IN_STOCK
-                            </button>
-                          )}
-                          {item.status === 'IN_STOCK' && (
-                            <button
-                              type="button"
-                              onClick={() => void updateToSold(item.batchId)}
-                              className="rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-200"
-                            >
-                              SOLD
-                            </button>
-                          )}
-                          {item.status !== 'TRANSFERRED' && item.status !== 'IN_STOCK' && (
-                            <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
-                              Không có thao tác
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-2 py-2">
-                        <button
-                          type="button"
-                          onClick={() => void openDetail(item.publicCode)}
+                        <Link
+                          href={`/dashboard/retailer/update?batchId=${encodeURIComponent(item.batchId)}`}
                           className="inline-flex items-center justify-center whitespace-nowrap rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-200"
                         >
                           Xem chi tiết
-                        </button>
+                        </Link>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+
+            {totalPages > 1 && (
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={page === 1}
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                >
+                  Trang trước
+                </button>
+                <span className="text-xs text-slate-600">Trang {page}/{totalPages}</span>
+                <button
+                  type="button"
+                  disabled={page === totalPages}
+                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                  className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                >
+                  Trang sau
+                </button>
+              </div>
+            )}
           </>
         )}
       </section>

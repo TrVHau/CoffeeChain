@@ -124,8 +124,19 @@ public class EvidenceService {
      * Local Kubo gateway is mapped to port 8081 in docker-compose.
      */
     public String gatewayUrl(String cid) {
-        String base = ipfsApiUrl.replace(":5001", ":8081");
-        return base + "/ipfs/" + cid;
+        try {
+            URI apiUri = URI.create(ipfsApiUrl);
+            String host = apiUri.getHost();
+            int port = apiUri.getPort() == 5001 ? 8081 : apiUri.getPort();
+            String scheme = apiUri.getScheme() != null ? apiUri.getScheme() : "http";
+
+            // The browser cannot resolve the Docker service name (ipfs), so always
+            // emit a host-reachable gateway URL.
+            String gatewayHost = (host == null || host.equalsIgnoreCase("ipfs")) ? "localhost" : host;
+            return scheme + "://" + gatewayHost + ":" + port + "/ipfs/" + cid;
+        } catch (Exception e) {
+            return "http://localhost:8081/ipfs/" + cid;
+        }
     }
 
     /**

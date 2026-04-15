@@ -6,4 +6,6 @@ import lombok.Data;
 @Data
 public class UpdateStatusRequest {
     @NotBlank private String newStatus;  // IN_STOCK | SOLD | PROCESSING | COMPLETED | ...
+    private String finalWeightKg;
+    private String roastDurationMinutes;
 }

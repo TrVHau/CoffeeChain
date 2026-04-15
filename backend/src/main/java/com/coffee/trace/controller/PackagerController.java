@@ -83,7 +83,7 @@ public class PackagerController {
                                          @Valid @RequestBody AddEvidenceRequest req) throws Exception {
         byte[] result = fabricGateway.submitAs(userId, "addEvidence",
                 id, req.getEvidenceHash(), req.getEvidenceUri());
-        return ResponseEntity.ok(objectMapper.readValue(result, Map.class));
+        return ResponseEntity.ok(toResponse(result, "addEvidence"));
     }
 
     /**

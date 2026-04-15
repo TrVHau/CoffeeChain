@@ -9,6 +9,7 @@ import com.coffee.trace.service.EvidenceService;
 import com.coffee.trace.service.FabricGatewayService;
 import com.coffee.trace.service.PublicCodeService;
 import com.coffee.trace.service.QrCodeService;
+import com.coffee.trace.service.AccountOptionsService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,6 +35,8 @@ class CreateControllerMappingTest {
     private PublicCodeService publicCodeService;
         @Mock
         private EvidenceService evidenceService;
+        @Mock
+        private AccountOptionsService accountOptionsService;
     @Mock
     private ObjectMapper objectMapper;
     @Mock
@@ -44,13 +47,17 @@ class CreateControllerMappingTest {
     @BeforeEach
     void commonStubs() throws Exception {
                 when(objectMapper.readValue(any(String.class), eq(Map.class))).thenReturn(Map.of("ok", true));
+                when(accountOptionsService.getFarmLocations("farmer_alice")).thenReturn(java.util.List.of("Da Lat Farm"));
+                when(accountOptionsService.isAllowedFarmLocation("farmer_alice", "Da Lat Farm")).thenReturn(true);
+                when(accountOptionsService.getProcessingFacilities("processor_bob")).thenReturn(java.util.List.of("Plant A"));
+                when(accountOptionsService.isAllowedProcessingFacility("processor_bob", "Plant A")).thenReturn(true);
     }
 
     @Test
     void farmerCreateHarvest_mapsArgumentsToChaincodeSignature() throws Exception {
-        FarmerController controller = new FarmerController(fabricGateway, publicCodeService, objectMapper);
+                FarmerController controller = new FarmerController(fabricGateway, publicCodeService, accountOptionsService, objectMapper);
         CreateHarvestBatchRequest req = new CreateHarvestBatchRequest();
-        req.setFarmLocation("Da Lat");
+                req.setFarmLocation("Da Lat Farm");
         req.setHarvestDate("2026-03-15");
         req.setCoffeeVariety("Arabica");
         req.setWeightKg("500");
@@ -65,7 +72,7 @@ class CreateControllerMappingTest {
                 "farmer_alice",
                 "createHarvestBatch",
                 "HAR-20260315-000001-ABC123",
-                "Da Lat",
+                                "Da Lat Farm",
                 "2026-03-15",
                 "Arabica",
                 "500"
@@ -74,7 +81,7 @@ class CreateControllerMappingTest {
 
     @Test
     void processorCreate_mapsArgumentsToChaincodeSignature() throws Exception {
-        ProcessorController controller = new ProcessorController(fabricGateway, publicCodeService, objectMapper);
+                ProcessorController controller = new ProcessorController(fabricGateway, publicCodeService, accountOptionsService, objectMapper);
         CreateProcessedBatchRequest req = new CreateProcessedBatchRequest();
         req.setParentBatchId("HARVEST-1");
         req.setProcessingMethod("Washed");

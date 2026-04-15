@@ -7,8 +7,11 @@ import com.coffee.trace.dto.request.UpdateStatusRequest;
 import com.coffee.trace.service.EvidenceService;
 import com.coffee.trace.service.FabricGatewayService;
 import com.coffee.trace.service.PublicCodeService;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -21,6 +24,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api")
 public class RoasterController {
+
+    private static final Logger log = LoggerFactory.getLogger(RoasterController.class);
 
     private final FabricGatewayService fabricGateway;
     private final EvidenceService      evidenceService;
@@ -73,7 +78,7 @@ public class RoasterController {
                 req.getRoastProfile(),
                 req.getRoastDate(),
                 req.getRoastDurationMinutes(),
-                req.getWeightKg()
+            req.getWeightKg() != null ? req.getWeightKg() : ""
         );
         return ResponseEntity.ok(toResponse(result, "createRoastBatch"));
     }
@@ -107,6 +112,29 @@ public class RoasterController {
                                           @PathVariable String id,
                                           @Valid @RequestBody UpdateStatusRequest req) throws Exception {
         byte[] result = fabricGateway.submitAs(userId, "updateBatchStatus", id, req.getNewStatus());
+
+        if ("COMPLETED".equalsIgnoreCase(req.getNewStatus())) {
+            if (req.getFinalWeightKg() == null || req.getFinalWeightKg().isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "error", "Vui lòng nhập khối lượng thực tế khi hoàn thành batch."
+                ));
+            }
+            if (req.getRoastDurationMinutes() == null || req.getRoastDurationMinutes().isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "error", "Vui lòng nhập thời gian rang khi hoàn thành batch."
+                ));
+            }
+            fabricGateway.submitAs(userId, "setBatchFinalWeight", id, req.getFinalWeightKg());
+
+            // Backward-compatible: if network chaincode has not been upgraded yet,
+            // keep status update successful and log this optional metadata update.
+            try {
+                fabricGateway.submitAs(userId, "setRoastDurationMinutes", id, req.getRoastDurationMinutes());
+            } catch (Exception metadataError) {
+                log.warn("setRoastDurationMinutes is unavailable on current chaincode package: {}", metadataError.getMessage());
+            }
+        }
+
         return ResponseEntity.ok(toResponse(result, "updateBatchStatus"));
     }
 
@@ -120,6 +148,6 @@ public class RoasterController {
             return Map.of("status", "SUCCESS", "action", action);
         }
 
-        return objectMapper.readValue(payload, Map.class);
+        return objectMapper.readValue(payload, new TypeReference<Map<String, Object>>() {});
     }
 }

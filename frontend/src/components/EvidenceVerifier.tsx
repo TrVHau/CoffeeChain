@@ -12,7 +12,13 @@ interface EvidenceVerifierProps {
 
 function ipfsToHttp(uri: string): string {
   if (uri.startsWith('ipfs://')) {
-    return `https://ipfs.io/ipfs/${uri.slice(7)}`;
+    return `http://localhost:8081/ipfs/${uri.slice(7)}`;
+  }
+  if (uri.startsWith('http://ipfs:8081/')) {
+    return uri.replace('http://ipfs:8081/', 'http://localhost:8081/');
+  }
+  if (uri.startsWith('https://ipfs:8081/')) {
+    return uri.replace('https://ipfs:8081/', 'http://localhost:8081/');
   }
   return uri;
 }

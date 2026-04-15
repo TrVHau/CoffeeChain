@@ -112,7 +112,7 @@ PACKAGE_ID=$(docker exec \
   peer0.org1.example.com \
   peer lifecycle chaincode queryinstalled 2>&1 \
   | grep "Package ID:.*${CHAINCODE_NAME}_${CHAINCODE_VERSION}" \
-  | head -1 \
+  | tail -1 \
   | sed 's/Package ID: //' \
   | sed 's/, Label.*//' \
   | tr -d '[:space:]')

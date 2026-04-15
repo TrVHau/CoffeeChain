@@ -3,8 +3,10 @@ package com.coffee.trace.controller;
 import com.coffee.trace.dto.request.CreateProcessedBatchRequest;
 import com.coffee.trace.dto.request.AddEvidenceRequest;
 import com.coffee.trace.dto.request.UpdateStatusRequest;
+import com.coffee.trace.service.AccountOptionsService;
 import com.coffee.trace.service.FabricGatewayService;
 import com.coffee.trace.service.PublicCodeService;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -21,13 +23,16 @@ public class ProcessorController {
 
     private final FabricGatewayService fabricGateway;
     private final PublicCodeService    publicCodeService;
+    private final AccountOptionsService accountOptionsService;
     private final ObjectMapper         objectMapper;
 
     public ProcessorController(FabricGatewayService fabricGateway,
                                PublicCodeService publicCodeService,
+                               AccountOptionsService accountOptionsService,
                                ObjectMapper objectMapper) {
         this.fabricGateway    = fabricGateway;
         this.publicCodeService = publicCodeService;
+        this.accountOptionsService = accountOptionsService;
         this.objectMapper     = objectMapper;
     }
 
@@ -36,6 +41,13 @@ public class ProcessorController {
     @PreAuthorize("hasRole('PROCESSOR')")
     public ResponseEntity<?> createProcessed(@AuthenticationPrincipal String userId,
                                              @Valid @RequestBody CreateProcessedBatchRequest req) throws Exception {
+        if (!accountOptionsService.isAllowedProcessingFacility(userId, req.getFacilityName())) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "Cơ sở sơ chế không hợp lệ cho tài khoản hiện tại.",
+                "allowedFacilities", accountOptionsService.getProcessingFacilities(userId)
+            ));
+        }
+
         String publicCode = publicCodeService.generateForType("PROCESSED");
         byte[] result = fabricGateway.submitAs(
                 userId,
@@ -44,10 +56,19 @@ public class ProcessorController {
                 req.getParentBatchId(),
                 req.getProcessingMethod(),
                 req.getStartDate(),
-                req.getEndDate(),
+            req.getEndDate() != null ? req.getEndDate() : "",
                 req.getFacilityName(),
-                req.getWeightKg()
+            req.getWeightKg() != null ? req.getWeightKg() : ""
         );
+
+        // New process batches should start immediately in IN_PROCESS state.
+        Map<String, Object> created = toResponse(result, "createProcessedBatch");
+        Object batchIdObj = created.get("batchId");
+        String batchId = batchIdObj != null ? batchIdObj.toString() : null;
+        if (batchId != null && !batchId.isBlank()) {
+            fabricGateway.submitAs(userId, "updateBatchStatus", batchId, "IN_PROCESS");
+        }
+
         return ResponseEntity.ok(toResponse(result, "createProcessedBatch"));
     }
 
@@ -58,6 +79,16 @@ public class ProcessorController {
                                           @PathVariable String id,
                                           @Valid @RequestBody UpdateStatusRequest req) throws Exception {
         byte[] result = fabricGateway.submitAs(userId, "updateBatchStatus", id, req.getNewStatus());
+
+        if ("COMPLETED".equalsIgnoreCase(req.getNewStatus())) {
+            if (req.getFinalWeightKg() == null || req.getFinalWeightKg().isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "error", "Vui lòng nhập khối lượng thực tế khi hoàn thành batch."
+                ));
+            }
+            fabricGateway.submitAs(userId, "setBatchFinalWeight", id, req.getFinalWeightKg());
+        }
+
         return ResponseEntity.ok(toResponse(result, "updateBatchStatus"));
     }
 
@@ -71,7 +102,7 @@ public class ProcessorController {
             return Map.of("status", "SUCCESS", "action", action);
         }
 
-        return objectMapper.readValue(payload, Map.class);
+        return objectMapper.readValue(payload, new TypeReference<Map<String, Object>>() {});
     }
 
     /** POST /api/process/{id}/evidence — attach evidence hash + IPFS URI */
@@ -82,6 +113,6 @@ public class ProcessorController {
                                          @Valid @RequestBody AddEvidenceRequest req) throws Exception {
         byte[] result = fabricGateway.submitAs(userId, "addEvidence",
                 id, req.getEvidenceHash(), req.getEvidenceUri());
-        return ResponseEntity.ok(objectMapper.readValue(result, Map.class));
+        return ResponseEntity.ok(toResponse(result, "addEvidence"));
     }
 }
