@@ -4,9 +4,11 @@ import com.coffee.trace.dto.request.AddEvidenceRequest;
 import com.coffee.trace.dto.request.CreateRoastBatchRequest;
 import com.coffee.trace.dto.request.TransferRequest;
 import com.coffee.trace.dto.request.UpdateStatusRequest;
+import com.coffee.trace.repository.BatchRepository;
 import com.coffee.trace.service.EvidenceService;
 import com.coffee.trace.service.FabricGatewayService;
 import com.coffee.trace.service.PublicCodeService;
+import com.coffee.trace.util.WeightValidator;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
@@ -30,15 +32,18 @@ public class RoasterController {
     private final FabricGatewayService fabricGateway;
     private final EvidenceService      evidenceService;
     private final PublicCodeService    publicCodeService;
+    private final BatchRepository      batchRepository;
     private final ObjectMapper         objectMapper;
 
     public RoasterController(FabricGatewayService fabricGateway,
                              EvidenceService evidenceService,
                              PublicCodeService publicCodeService,
+                             BatchRepository batchRepository,
                              ObjectMapper objectMapper) {
         this.fabricGateway    = fabricGateway;
         this.evidenceService  = evidenceService;
         this.publicCodeService = publicCodeService;
+        this.batchRepository  = batchRepository;
         this.objectMapper     = objectMapper;
     }
 
@@ -69,6 +74,16 @@ public class RoasterController {
     @PreAuthorize("hasRole('ROASTER')")
     public ResponseEntity<?> createRoast(@AuthenticationPrincipal String userId,
                                          @Valid @RequestBody CreateRoastBatchRequest req) throws Exception {
+        if (batchRepository.existsByParentBatchIdAndType(req.getParentBatchId(), "ROAST")) {
+            return ResponseEntity.status(409).body(Map.of(
+                "error", "Lô nguồn này đã được dùng để tạo Roast batch trước đó, không thể dùng lại.",
+                "parentBatchId", req.getParentBatchId(),
+                "nextType", "ROAST"
+            ));
+        }
+
+        String normalizedWeight = WeightValidator.normalizeOptional(req.getWeightKg(), "Khối lượng");
+
         String publicCode = publicCodeService.generateForType("ROAST");
         byte[] result = fabricGateway.submitAs(
                 userId,
@@ -78,7 +93,7 @@ public class RoasterController {
                 req.getRoastProfile(),
                 req.getRoastDate(),
                 req.getRoastDurationMinutes(),
-            req.getWeightKg() != null ? req.getWeightKg() : ""
+            normalizedWeight
         );
         return ResponseEntity.ok(toResponse(result, "createRoastBatch"));
     }
@@ -130,17 +145,13 @@ public class RoasterController {
         byte[] result = fabricGateway.submitAs(userId, "updateBatchStatus", id, req.getNewStatus());
 
         if ("COMPLETED".equalsIgnoreCase(req.getNewStatus())) {
-            if (req.getFinalWeightKg() == null || req.getFinalWeightKg().isBlank()) {
-                return ResponseEntity.badRequest().body(Map.of(
-                        "error", "Vui lòng nhập khối lượng thực tế khi hoàn thành batch."
-                ));
-            }
+            String normalizedFinalWeight = WeightValidator.normalizeRequired(req.getFinalWeightKg(), "Khối lượng thực tế");
             if (req.getRoastDurationMinutes() == null || req.getRoastDurationMinutes().isBlank()) {
                 return ResponseEntity.badRequest().body(Map.of(
                         "error", "Vui lòng nhập thời gian rang khi hoàn thành batch."
                 ));
             }
-            fabricGateway.submitAs(userId, "setBatchFinalWeight", id, req.getFinalWeightKg());
+            fabricGateway.submitAs(userId, "setBatchFinalWeight", id, normalizedFinalWeight);
 
             // Backward-compatible: if network chaincode has not been upgraded yet,
             // keep status update successful and log this optional metadata update.

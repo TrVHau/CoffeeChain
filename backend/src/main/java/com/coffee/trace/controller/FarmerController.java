@@ -7,6 +7,7 @@ import com.coffee.trace.dto.request.UpdateStatusRequest;
 import com.coffee.trace.service.AccountOptionsService;
 import com.coffee.trace.service.FabricGatewayService;
 import com.coffee.trace.service.PublicCodeService;
+import com.coffee.trace.util.WeightValidator;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
@@ -49,6 +50,8 @@ public class FarmerController {
             ));
         }
 
+        String normalizedWeight = WeightValidator.normalizeOptional(req.getWeightKg(), "Khối lượng");
+
         String publicCode = publicCodeService.generateForType("HARVEST");
         byte[] result = fabricGateway.submitAs(
                 userId,
@@ -57,7 +60,7 @@ public class FarmerController {
                 req.getFarmLocation(),
                 req.getHarvestDate(),
                 req.getCoffeeVariety(),
-            req.getWeightKg() != null ? req.getWeightKg() : ""
+            normalizedWeight
         );
         return ResponseEntity.ok(toResponse(result, "createHarvestBatch"));
     }
@@ -133,12 +136,8 @@ public class FarmerController {
         byte[] result = fabricGateway.submitAs(userId, "updateBatchStatus", id, req.getNewStatus());
 
         if ("COMPLETED".equalsIgnoreCase(req.getNewStatus())) {
-            if (req.getFinalWeightKg() == null || req.getFinalWeightKg().isBlank()) {
-                return ResponseEntity.badRequest().body(Map.of(
-                        "error", "Vui lòng nhập khối lượng thực tế khi hoàn thành batch."
-                ));
-            }
-            fabricGateway.submitAs(userId, "setBatchFinalWeight", id, req.getFinalWeightKg());
+            String normalizedFinalWeight = WeightValidator.normalizeRequired(req.getFinalWeightKg(), "Khối lượng thực tế");
+            fabricGateway.submitAs(userId, "setBatchFinalWeight", id, normalizedFinalWeight);
         }
 
         return ResponseEntity.ok(toResponse(result, "updateBatchStatus"));

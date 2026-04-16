@@ -12,7 +12,7 @@ import {
   mockCreateRoast,
   mockGetBatchById,
   mockGetList,
-  mockGetPackagedQrUrl,
+  mockGetBatchQrUrl,
   mockGetTrace,
   mockRecordFarmActivity,
   mockRequestTransfer,
@@ -125,10 +125,12 @@ function isOfflineError(error: unknown): boolean {
 }
 
 export function getApiErrorMessage(error: unknown): string {
-  const axiosError = error as AxiosError<{ message?: string }>;
+  const axiosError = error as AxiosError<{ message?: string; error?: string; details?: string }>;
   if (error instanceof AxiosError || (typeof error === 'object' && error !== null && 'isAxiosError' in error)) {
     const data = axiosError.response?.data;
     if (data?.message) return data.message;
+    if (data?.error) return data.error;
+    if (data?.details) return data.details;
     if (axiosError.message) return axiosError.message;
   }
   if (error instanceof Error) return error.message;
@@ -532,19 +534,23 @@ async function updateRetailStatus(batchId: string, newStatus: Extract<BatchStatu
   }
 }
 
-async function getPackagedQrUrl(batchId: string): Promise<string> {
+async function getBatchQrUrl(publicCode: string): Promise<string> {
   try {
-    const res = await apiClient.get<ArrayBuffer>(`/api/package/${encodeURIComponent(batchId)}/qr`, {
+    const res = await apiClient.get<ArrayBuffer>(`/api/qr/${encodeURIComponent(publicCode)}`, {
       responseType: 'arraybuffer',
     });
     const blob = new Blob([res.data], { type: 'image/png' });
     return URL.createObjectURL(blob);
   } catch (error) {
     if (isOfflineError(error)) {
-      return mockGetPackagedQrUrl(batchId);
+      return mockGetBatchQrUrl(publicCode);
     }
     throw error;
   }
+}
+
+async function getPackagedQrUrl(publicCode: string): Promise<string> {
+  return getBatchQrUrl(publicCode);
 }
 
 export const dashboardApi = {
@@ -572,5 +578,6 @@ export const dashboardApi = {
   createPackaged,
   getAccountOptions,
   updateRetailStatus,
+  getBatchQrUrl,
   getPackagedQrUrl,
 };

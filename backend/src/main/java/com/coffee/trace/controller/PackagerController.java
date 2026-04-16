@@ -6,6 +6,7 @@ import com.coffee.trace.repository.BatchRepository;
 import com.coffee.trace.service.FabricGatewayService;
 import com.coffee.trace.service.PublicCodeService;
 import com.coffee.trace.service.QrCodeService;
+import com.coffee.trace.util.WeightValidator;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
@@ -99,13 +100,23 @@ public class PackagerController {
     @PreAuthorize("hasRole('PACKAGER')")
     public ResponseEntity<?> createPackaged(@AuthenticationPrincipal String userId,
                                             @Valid @RequestBody CreatePackagedBatchRequest req) throws Exception {
+        if (batchRepository.existsByParentBatchIdAndType(req.getParentBatchId(), "PACKAGED")) {
+            return ResponseEntity.status(409).body(Map.of(
+                "error", "Lô nguồn này đã được dùng để tạo Packaged batch trước đó, không thể dùng lại.",
+                "parentBatchId", req.getParentBatchId(),
+                "nextType", "PACKAGED"
+            ));
+        }
+
+        String normalizedPackageWeight = WeightValidator.normalizeRequired(req.getPackageWeight(), "Khối lượng đóng gói");
+
         String publicCode = publicCodeService.generateForType("PACKAGED");
         byte[] result = fabricGateway.submitAs(
                 userId,
                 "createPackagedBatch",
                 publicCode,
                 req.getParentBatchId(),
-                req.getPackageWeight(),
+                normalizedPackageWeight,
                 req.getPackageCount(),
                 req.getPackageDate(),
                 req.getExpiryDate(),

@@ -10,7 +10,7 @@ import { TraceTimeline } from '@/components/TraceTimeline';
 import type { BatchResponse, TraceResponse } from '@/lib/api/types';
 import { useRoleGuard } from '@/lib/auth/useRoleGuard';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [10, 20] as const;
 
 export default function RetailerDashboardPage() {
   const { ready } = useRoleGuard('RETAILER');
@@ -23,10 +23,12 @@ export default function RetailerDashboardPage() {
   const [detailError, setDetailError] = useState('');
   const [selectedCode, setSelectedCode] = useState('');
   const [detailTrace, setDetailTrace] = useState<TraceResponse | null>(null);
+  const [qrDownloading, setQrDownloading] = useState(false);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(10);
 
-  const totalPages = Math.max(1, Math.ceil(packaged.length / PAGE_SIZE));
-  const pagedPackaged = packaged.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(packaged.length / pageSize));
+  const pagedPackaged = packaged.slice((page - 1) * pageSize, page * pageSize);
 
   useEffect(() => {
     if (!message) return;
@@ -80,19 +82,22 @@ export default function RetailerDashboardPage() {
     }
   }
 
-  async function downloadQr(batchId: string) {
+  async function downloadQr(publicCode: string) {
     setError('');
+    setQrDownloading(true);
     try {
-      const url = await dashboardApi.getPackagedQrUrl(batchId);
+      const url = await dashboardApi.getBatchQrUrl(publicCode);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${batchId}.png`;
+      link.download = `${publicCode}.png`;
       document.body.appendChild(link);
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
       setError(getApiErrorMessage(e));
+    } finally {
+      setQrDownloading(false);
     }
   }
 
@@ -119,20 +124,37 @@ export default function RetailerDashboardPage() {
       <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold text-stone-900">Danh sách Packaged</h2>
-          <button
-            type="button"
-            onClick={() => void refresh()}
-            className="rounded-lg border border-amber-200 px-3 py-1.5 text-sm text-amber-800 hover:bg-amber-50"
-          >
-            Làm mới
-          </button>
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-1 text-xs text-slate-600">
+              <span>Dòng/trang</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="rounded-lg border border-amber-200 bg-white px-2 py-1 text-xs text-amber-800"
+              >
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>{size}</option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => void refresh()}
+              className="rounded-lg border border-amber-200 px-3 py-1.5 text-sm text-amber-800 hover:bg-amber-50"
+            >
+              Làm mới
+            </button>
+          </div>
         </div>
         {message && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</p>}
         {error && <ErrorState message={error} />}
         {loading && <LoadingState />}
-        {!loading && !error && packaged.length === 0 && <EmptyState text="Chưa có Packaged batch nào." />}
+        {!loading && packaged.length === 0 && <EmptyState text="Chưa có Packaged batch nào." />}
 
-        {!loading && !error && packaged.length > 0 && (
+        {!loading && packaged.length > 0 && (
           <>
             <div className="space-y-3 md:hidden">
               {pagedPackaged.map((item) => (
@@ -183,27 +205,25 @@ export default function RetailerDashboardPage() {
               </table>
             </div>
 
-            {totalPages > 1 && (
-              <div className="mt-4 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  disabled={page === 1}
-                  onClick={() => setPage((current) => Math.max(1, current - 1))}
-                  className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50"
-                >
-                  Trang trước
-                </button>
-                <span className="text-xs text-slate-600">Trang {page}/{totalPages}</span>
-                <button
-                  type="button"
-                  disabled={page === totalPages}
-                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-                  className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50"
-                >
-                  Trang sau
-                </button>
-              </div>
-            )}
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                disabled={page === 1}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+              >
+                Trang trước
+              </button>
+              <span className="text-xs text-slate-600">Trang {page}/{totalPages}</span>
+              <button
+                type="button"
+                disabled={page === totalPages}
+                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+              >
+                Trang sau
+              </button>
+            </div>
           </>
         )}
       </section>
@@ -228,11 +248,21 @@ export default function RetailerDashboardPage() {
             {detailLoading && <LoadingState text="Đang tải chi tiết lô..." />}
             {!detailLoading && detailError && <ErrorState message={detailError} />}
             {!detailLoading && !detailError && detailTrace && (
-              <TraceTimeline
-                batches={[...detailTrace.parentChain, detailTrace.batch]}
-                farmActivities={detailTrace.farmActivities}
-                ledgerRefs={detailTrace.ledgerRefs}
-              />
+              <>
+                <TraceTimeline
+                  batches={[...detailTrace.parentChain, detailTrace.batch]}
+                  farmActivities={detailTrace.farmActivities}
+                  ledgerRefs={detailTrace.ledgerRefs}
+                />
+                <button
+                  type="button"
+                  onClick={() => void downloadQr(detailTrace.batch.publicCode)}
+                  disabled={qrDownloading}
+                  className="mt-4 inline-flex rounded-lg border border-amber-200 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-50"
+                >
+                  {qrDownloading ? 'Đang tạo QR...' : 'Tải QR truy xuất'}
+                </button>
+              </>
             )}
           </div>
         </div>

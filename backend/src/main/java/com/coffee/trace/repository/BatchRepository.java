@@ -24,6 +24,8 @@ public interface BatchRepository extends JpaRepository<BatchEntity, String> {
 
     List<BatchEntity> findByOwnerMspAndStatus(String ownerMsp, String status);
 
+    boolean existsByParentBatchIdAndType(String parentBatchId, String type);
+
     @Modifying @Transactional
     @Query("UPDATE BatchEntity b SET b.status = :status, b.updatedAt = :now WHERE b.batchId = :batchId")
     void updateStatus(String batchId, String status, Instant now);

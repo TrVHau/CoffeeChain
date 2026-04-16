@@ -39,6 +39,7 @@ jest.mock('@/lib/api/dashboardApi', () => ({
     acceptTransfer: jest.fn(),
     createPackaged: jest.fn(),
     updateRetailStatus: jest.fn(),
+    getBatchQrUrl: jest.fn(),
     getPackagedQrUrl: jest.fn(),
   },
   getApiErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'error'),

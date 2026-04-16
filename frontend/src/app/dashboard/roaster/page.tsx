@@ -8,6 +8,7 @@ import { StatusBadge } from '@/components/dashboard/StatusBadge';
 import { QrScanner } from '@/components/QrScanner';
 import { dashboardApi, getApiErrorMessage, type CreateRoastInput } from '@/lib/api/dashboardApi';
 import { TraceTimeline } from '@/components/TraceTimeline';
+import { getWeightValidationError, normalizeWeightInput } from '@/lib/validation/weight';
 import type { BatchResponse, BatchStatus, TraceResponse } from '@/lib/api/types';
 import { useRoleGuard } from '@/lib/auth/useRoleGuard';
 
@@ -61,7 +62,7 @@ function canMoveTo(current: BatchStatus, next: BatchStatus): boolean {
   return false;
 }
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [10, 20] as const;
 
 export default function RoasterDashboardPage() {
   const { ready } = useRoleGuard('ROASTER');
@@ -79,6 +80,7 @@ export default function RoasterDashboardPage() {
   const [detailError, setDetailError] = useState('');
   const [selectedCode, setSelectedCode] = useState('');
   const [detailTrace, setDetailTrace] = useState<TraceResponse | null>(null);
+  const [qrDownloading, setQrDownloading] = useState(false);
   const [sourceCodeInput, setSourceCodeInput] = useState('');
   const [sourceResolving, setSourceResolving] = useState(false);
   const [resolvedSource, setResolvedSource] = useState<BatchResponse | null>(null);
@@ -86,9 +88,10 @@ export default function RoasterDashboardPage() {
   const [transferTargets, setTransferTargets] = useState<string[]>([]);
   const [selectedTransferTarget, setSelectedTransferTarget] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(10);
 
-  const totalPages = Math.max(1, Math.ceil(roasts.length / PAGE_SIZE));
-  const pagedRoasts = roasts.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(roasts.length / pageSize));
+  const pagedRoasts = roasts.slice((page - 1) * pageSize, page * pageSize);
 
   useEffect(() => {
     if (!message) return;
@@ -224,7 +227,12 @@ export default function RoasterDashboardPage() {
           setError('Bạn cần nhập khối lượng thực tế để hoàn thành batch.');
           return;
         }
-        await dashboardApi.updateRoastStatusWithWeight(batchId, newStatus, finalWeightKg.trim());
+        const weightError = getWeightValidationError(finalWeightKg, 'Khối lượng thực tế');
+        if (weightError) {
+          setError(weightError);
+          return;
+        }
+        await dashboardApi.updateRoastStatusWithWeight(batchId, newStatus, normalizeWeightInput(finalWeightKg));
       } else {
         await dashboardApi.updateRoastStatus(batchId, newStatus);
       }
@@ -267,6 +275,26 @@ export default function RoasterDashboardPage() {
     }
   }
 
+  async function downloadQr() {
+    if (!detailTrace?.batch.publicCode) return;
+    setQrDownloading(true);
+    setDetailError('');
+    try {
+      const url = await dashboardApi.getBatchQrUrl(detailTrace.batch.publicCode);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${detailTrace.batch.publicCode}.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      setDetailError(getApiErrorMessage(e));
+    } finally {
+      setQrDownloading(false);
+    }
+  }
+
   if (!ready) return <LoadingState text="Đang xác thực quyền truy cập..." />;
 
   return (
@@ -275,6 +303,7 @@ export default function RoasterDashboardPage() {
         <div className="space-y-6">
           <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
             <h2 className="text-base font-semibold text-amber-900">Tạo Roast batch</h2>
+            {error && <div className="mt-3"><ErrorState message={error} /></div>}
             <form onSubmit={handleCreate} className="mt-4 space-y-3">
               <label className="block text-sm">
                 <span className="mb-1 block font-medium text-slate-700">Processed nguồn (nhập mã hoặc quét QR)</span>
@@ -377,20 +406,36 @@ export default function RoasterDashboardPage() {
         <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-base font-semibold text-amber-900">Danh sách Roast</h2>
-            <button
-              type="button"
-              onClick={() => void refresh()}
-              className="rounded-lg border border-amber-200 px-3 py-1.5 text-sm text-amber-700 hover:bg-amber-50"
-            >
-              Làm mới
-            </button>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1 text-xs text-slate-600">
+                <span>Dòng/trang</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className="rounded-lg border border-amber-200 bg-white px-2 py-1 text-xs text-amber-800"
+                >
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>{size}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => void refresh()}
+                className="rounded-lg border border-amber-200 px-3 py-1.5 text-sm text-amber-700 hover:bg-amber-50"
+              >
+                Làm mới
+              </button>
+            </div>
           </div>
           {message && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</p>}
-          {error && <ErrorState message={error} />}
           {loading && <LoadingState />}
-          {!loading && !error && roasts.length === 0 && <EmptyState text="Chưa có Roast batch nào." />}
+          {!loading && roasts.length === 0 && <EmptyState text="Chưa có Roast batch nào." />}
 
-          {!loading && !error && roasts.length > 0 && (
+          {!loading && roasts.length > 0 && (
             <>
               <div className="space-y-3 md:hidden">
                 {pagedRoasts.map((item) => (
@@ -479,27 +524,25 @@ export default function RoasterDashboardPage() {
                 </table>
               </div>
 
-              {totalPages > 1 && (
-                <div className="mt-4 flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    disabled={page === 1}
-                    onClick={() => setPage((current) => Math.max(1, current - 1))}
-                    className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50"
-                  >
-                    Trang trước
-                  </button>
-                  <span className="text-xs text-slate-600">Trang {page}/{totalPages}</span>
-                  <button
-                    type="button"
-                    disabled={page === totalPages}
-                    onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-                    className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50"
-                  >
-                    Trang sau
-                  </button>
-                </div>
-              )}
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={page === 1}
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                >
+                  Trang trước
+                </button>
+                <span className="text-xs text-slate-600">Trang {page}/{totalPages}</span>
+                <button
+                  type="button"
+                  disabled={page === totalPages}
+                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                  className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                >
+                  Trang sau
+                </button>
+              </div>
             </>
           )}
         </section>
@@ -531,6 +574,16 @@ export default function RoasterDashboardPage() {
                   farmActivities={detailTrace.farmActivities}
                   ledgerRefs={detailTrace.ledgerRefs}
                 />
+                {detailTrace.batch.status === 'COMPLETED' && (
+                  <button
+                    type="button"
+                    onClick={() => void downloadQr()}
+                    disabled={qrDownloading}
+                    className="mt-4 inline-flex rounded-lg border border-amber-200 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-50"
+                  >
+                    {qrDownloading ? 'Đang tạo QR...' : 'Tải QR truy xuất'}
+                  </button>
+                )}
                 {detailTrace.batch.type === 'ROAST' && detailTrace.batch.status === 'COMPLETED' && (
                   <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2">
                     <select

@@ -238,7 +238,7 @@ services:
       - FABRIC_ORG1_USERS_BASE_PATH=/crypto/peerOrganizations/org1.example.com/users
       - FABRIC_ORG2_USERS_BASE_PATH=/crypto/peerOrganizations/org2.example.com/users
       - IPFS_API_URL=http://ipfs:5001
-      - TRACE_PUBLIC_BASE_URL=http://localhost:3000/trace/
+      - TRACE_PUBLIC_BASE_URL=${TRACE_PUBLIC_BASE_URL}
       - JWT_SECRET=${JWT_SECRET:-coffee-chain-demo-secret-key-at-least-32-chars!!}
     volumes:
       - ${CRYPTO_BASE:-./crypto-config}:/crypto
@@ -261,7 +261,7 @@ services:
       dockerfile: Dockerfile
     container_name: frontend
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
     ports:
       - "3000:3000"
     depends_on:

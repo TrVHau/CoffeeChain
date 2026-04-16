@@ -27,7 +27,7 @@ function toEvidenceUrl(uri: string): string {
   return uri;
 }
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [10, 20] as const;
 
 function sortByUpdatedAtDesc(items: BatchResponse[]): BatchResponse[] {
   return [...items].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
@@ -53,9 +53,13 @@ export default function PackagerDashboardPage() {
   const [detailTrace, setDetailTrace] = useState<TraceResponse | null>(null);
   const [acceptingBatchId, setAcceptingBatchId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [pendingPage, setPendingPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(10);
 
-  const totalPages = Math.max(1, Math.ceil(acceptedRoasts.length / PAGE_SIZE));
-  const pagedAcceptedRoasts = acceptedRoasts.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(acceptedRoasts.length / pageSize));
+  const pagedAcceptedRoasts = acceptedRoasts.slice((page - 1) * pageSize, page * pageSize);
+  const pendingTotalPages = Math.max(1, Math.ceil(roastPendingTransfer.length / pageSize));
+  const pagedPendingRoasts = roastPendingTransfer.slice((pendingPage - 1) * pageSize, pendingPage * pageSize);
 
   useEffect(() => {
     if (!message) return;
@@ -121,6 +125,10 @@ export default function PackagerDashboardPage() {
     setPage((current) => Math.min(current, totalPages));
   }, [totalPages]);
 
+  useEffect(() => {
+    setPendingPage((current) => Math.min(current, pendingTotalPages));
+  }, [pendingTotalPages]);
+
   async function acceptTransfer(batchId: string) {
     setError('');
     setMessage('');
@@ -177,22 +185,40 @@ export default function PackagerDashboardPage() {
         <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-base font-semibold text-stone-900">Roast chờ chấp nhận chuyển giao</h2>
-            <button
-              type="button"
-              onClick={() => void refresh()}
-              className="rounded-lg border border-amber-200 px-3 py-1.5 text-sm text-amber-800 hover:bg-amber-50"
-            >
-              Làm mới
-            </button>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1 text-xs text-slate-600">
+                <span>Dòng/trang</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPendingPage(1);
+                    setPage(1);
+                  }}
+                  className="rounded-lg border border-amber-200 bg-white px-2 py-1 text-xs text-amber-800"
+                >
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>{size}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => void refresh()}
+                className="rounded-lg border border-amber-200 px-3 py-1.5 text-sm text-amber-800 hover:bg-amber-50"
+              >
+                Làm mới
+              </button>
+            </div>
           </div>
           {message && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</p>}
           {error && <ErrorState message={error} />}
           {loading && <LoadingState />}
-          {!loading && !error && roastPendingTransfer.length === 0 && <EmptyState text="Hiện không có lô nào ở trạng thái TRANSFER_PENDING." />}
+          {!loading && roastPendingTransfer.length === 0 && <EmptyState text="Hiện không có lô nào ở trạng thái TRANSFER_PENDING." />}
 
-          {!loading && !error && roastPendingTransfer.length > 0 && (
+          {!loading && roastPendingTransfer.length > 0 && (
             <div className="space-y-3">
-              {roastPendingTransfer.map((item) => (
+              {pagedPendingRoasts.map((item) => (
                 <div key={item.batchId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-100 bg-amber-50/40 px-3 py-2">
                   <div>
                     <p className="font-mono text-xs text-slate-700">{item.publicCode}</p>
@@ -209,6 +235,25 @@ export default function PackagerDashboardPage() {
                   </button>
                 </div>
               ))}
+              <div className="mt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={pendingPage === 1}
+                  onClick={() => setPendingPage((current) => Math.max(1, current - 1))}
+                  className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                >
+                  Trang trước
+                </button>
+                <span className="text-xs text-slate-600">Trang {pendingPage}/{pendingTotalPages}</span>
+                <button
+                  type="button"
+                  disabled={pendingPage === pendingTotalPages}
+                  onClick={() => setPendingPage((current) => Math.min(pendingTotalPages, current + 1))}
+                  className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                >
+                  Trang sau
+                </button>
+              </div>
             </div>
           )}
         </section>
@@ -225,11 +270,10 @@ export default function PackagerDashboardPage() {
             </button>
           </div>
           {message && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</p>}
-          {error && <ErrorState message={error} />}
           {loading && <LoadingState />}
-          {!loading && !error && acceptedRoasts.length === 0 && <EmptyState text="Chưa có lô Roast nào đã được chấp nhận chuyển giao." />}
+          {!loading && acceptedRoasts.length === 0 && <EmptyState text="Chưa có lô Roast nào đã được chấp nhận chuyển giao." />}
 
-          {!loading && !error && acceptedRoasts.length > 0 && (
+          {!loading && acceptedRoasts.length > 0 && (
             <>
               <div className="space-y-3 md:hidden">
                 {pagedAcceptedRoasts.map((item) => (
@@ -309,27 +353,25 @@ export default function PackagerDashboardPage() {
                 </table>
               </div>
 
-              {totalPages > 1 && (
-                <div className="mt-4 flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    disabled={page === 1}
-                    onClick={() => setPage((current) => Math.max(1, current - 1))}
-                    className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50"
-                  >
-                    Trang trước
-                  </button>
-                  <span className="text-xs text-slate-600">Trang {page}/{totalPages}</span>
-                  <button
-                    type="button"
-                    disabled={page === totalPages}
-                    onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-                    className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50"
-                  >
-                    Trang sau
-                  </button>
-                </div>
-              )}
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={page === 1}
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                >
+                  Trang trước
+                </button>
+                <span className="text-xs text-slate-600">Trang {page}/{totalPages}</span>
+                <button
+                  type="button"
+                  disabled={page === totalPages}
+                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                  className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                >
+                  Trang sau
+                </button>
+              </div>
             </>
           )}
         </section>

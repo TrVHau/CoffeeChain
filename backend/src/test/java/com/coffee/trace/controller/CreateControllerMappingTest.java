@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -51,6 +52,7 @@ class CreateControllerMappingTest {
                 when(accountOptionsService.isAllowedFarmLocation("farmer_alice", "Da Lat Farm")).thenReturn(true);
                 when(accountOptionsService.getProcessingFacilities("processor_bob")).thenReturn(java.util.List.of("Plant A"));
                 when(accountOptionsService.isAllowedProcessingFacility("processor_bob", "Plant A")).thenReturn(true);
+                when(batchRepository.existsByParentBatchIdAndType(anyString(), anyString())).thenReturn(false);
     }
 
     @Test
@@ -81,7 +83,7 @@ class CreateControllerMappingTest {
 
     @Test
     void processorCreate_mapsArgumentsToChaincodeSignature() throws Exception {
-                ProcessorController controller = new ProcessorController(fabricGateway, publicCodeService, accountOptionsService, objectMapper);
+                ProcessorController controller = new ProcessorController(fabricGateway, publicCodeService, accountOptionsService, batchRepository, objectMapper);
         CreateProcessedBatchRequest req = new CreateProcessedBatchRequest();
         req.setParentBatchId("HARVEST-1");
         req.setProcessingMethod("Washed");
@@ -111,7 +113,7 @@ class CreateControllerMappingTest {
 
     @Test
     void roasterCreate_mapsArgumentsToChaincodeSignature() throws Exception {
-        RoasterController controller = new RoasterController(fabricGateway, evidenceService, publicCodeService, objectMapper);
+                RoasterController controller = new RoasterController(fabricGateway, evidenceService, publicCodeService, batchRepository, objectMapper);
         CreateRoastBatchRequest req = new CreateRoastBatchRequest();
         req.setParentBatchId("PROCESSED-1");
         req.setRoastProfile("Medium");

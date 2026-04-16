@@ -6,6 +6,7 @@ import { DashboardShell } from '@/components/dashboard/DashboardShell';
 import { EmptyState, ErrorState, LoadingState } from '@/components/dashboard/UiState';
 import { StatusBadge } from '@/components/dashboard/StatusBadge';
 import { dashboardApi, getApiErrorMessage, type CreateHarvestInput } from '@/lib/api/dashboardApi';
+import { getWeightValidationError, normalizeWeightInput } from '@/lib/validation/weight';
 import type { BatchResponse, BatchStatus } from '@/lib/api/types';
 import { useRoleGuard } from '@/lib/auth/useRoleGuard';
 
@@ -38,7 +39,7 @@ const STATUS_ACTION_LABELS: Partial<Record<BatchStatus, string>> = {
   COMPLETED: 'Đánh dấu hoàn thành',
 };
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [10, 20] as const;
 
 export default function FarmerDashboardPage() {
   const { ready } = useRoleGuard('FARMER');
@@ -52,9 +53,10 @@ export default function FarmerDashboardPage() {
   const [batches, setBatches] = useState<BatchResponse[]>([]);
   const [farmLocationOptions, setFarmLocationOptions] = useState<string[]>([]);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(10);
 
-  const totalPages = Math.max(1, Math.ceil(batches.length / PAGE_SIZE));
-  const pagedBatches = batches.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(batches.length / pageSize));
+  const pagedBatches = batches.slice((page - 1) * pageSize, page * pageSize);
 
   useEffect(() => {
     if (!message) return;
@@ -154,7 +156,12 @@ export default function FarmerDashboardPage() {
           setError('Bạn cần nhập khối lượng thực tế để hoàn thành batch.');
           return;
         }
-        await dashboardApi.updateHarvestStatusWithWeight(batchId, newStatus, finalWeightKg.trim());
+        const weightError = getWeightValidationError(finalWeightKg, 'Khối lượng thực tế');
+        if (weightError) {
+          setError(weightError);
+          return;
+        }
+        await dashboardApi.updateHarvestStatusWithWeight(batchId, newStatus, normalizeWeightInput(finalWeightKg));
       } else {
         await dashboardApi.updateHarvestStatus(batchId, newStatus);
       }
@@ -183,6 +190,7 @@ export default function FarmerDashboardPage() {
       <div className="grid gap-6 xl:grid-cols-[380px,1fr]">
         <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
           <h2 className="text-base font-semibold text-amber-900">Tạo Harvest batch</h2>
+          {error && <div className="mt-3"><ErrorState message={error} /></div>}
           <form onSubmit={handleCreate} className="mt-4 space-y-3">
             <label className="block text-sm">
               <span className="mb-1 block font-medium text-slate-700">Địa điểm nông trại</span>
@@ -247,21 +255,37 @@ export default function FarmerDashboardPage() {
         <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-base font-semibold text-amber-900">Danh sách Harvest</h2>
-            <button
-              type="button"
-              onClick={() => void refresh()}
-              className="rounded-lg border border-amber-200 px-3 py-1.5 text-sm text-amber-700 hover:bg-amber-50"
-            >
-              Làm mới
-            </button>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1 text-xs text-slate-600">
+                <span>Dòng/trang</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className="rounded-lg border border-amber-200 bg-white px-2 py-1 text-xs text-amber-800"
+                >
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>{size}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => void refresh()}
+                className="rounded-lg border border-amber-200 px-3 py-1.5 text-sm text-amber-700 hover:bg-amber-50"
+              >
+                Làm mới
+              </button>
+            </div>
           </div>
 
           {message && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</p>}
-          {error && <ErrorState message={error} />}
           {loading && <LoadingState />}
-          {!loading && !error && batches.length === 0 && <EmptyState text="Chưa có Harvest batch nào." />}
+          {!loading && batches.length === 0 && <EmptyState text="Chưa có Harvest batch nào." />}
 
-          {!loading && !error && batches.length > 0 && (
+          {!loading && batches.length > 0 && (
             <>
               <div className="space-y-3 md:hidden">
                 {pagedBatches.map((batch) => (

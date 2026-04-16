@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { ApiError, TraceService } from '@/lib/api/generated';
 import { OpenAPI } from '@/lib/api/generated/core/OpenAPI';
+import { apiClient } from '@/lib/api/client';
 import type { TraceResponse, BatchResponse } from '@/lib/api/types';
 import { TraceTimeline } from '@/components/TraceTimeline';
 
@@ -42,6 +43,10 @@ const STATUS_COLORS: Record<string, string> = {
   SOLD: 'bg-red-100 text-red-800',
 };
 
+function getApiBaseUrl(): string {
+  return apiClient.defaults.baseURL ?? '';
+}
+
 export default function TracePage({ params }: { params: { publicCode: string } }) {
   const { publicCode } = params;
 
@@ -53,7 +58,7 @@ export default function TracePage({ params }: { params: { publicCode: string } }
   useEffect(() => {
     let cancelled = false;
     const previousBase = OpenAPI.BASE;
-    OpenAPI.BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080';
+    OpenAPI.BASE = getApiBaseUrl();
 
     const traceRequest = TraceService.getApiTrace(publicCode);
     void (async () => {

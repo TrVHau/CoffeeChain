@@ -358,10 +358,14 @@ export function mockAcceptTransfer(batchId: string): BatchResponse {
     });
 }
 
-export function mockGetPackagedQrUrl(batchId: string): string {
+export function mockGetBatchQrUrl(batchId: string): string {
     const payload = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320" viewBox="0 0 320 320"><rect width="100%" height="100%" fill="#fffaf0"/><rect x="24" y="24" width="272" height="272" rx="24" fill="#78350f" opacity="0.08"/><text x="50%" y="45%" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" fill="#78350f">CoffeeChain</text><text x="50%" y="54%" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#92400e">${batchId}</text><text x="50%" y="63%" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#a16207">Mock QR</text></svg>`;
     if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
         return URL.createObjectURL(new Blob([payload], { type: 'image/svg+xml' }));
     }
     return `data:image/svg+xml;base64,${btoa(payload)}`;
+}
+
+export function mockGetPackagedQrUrl(batchId: string): string {
+    return mockGetBatchQrUrl(batchId);
 }

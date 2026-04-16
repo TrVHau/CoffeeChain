@@ -6,8 +6,10 @@ import { DashboardShell } from '@/components/dashboard/DashboardShell';
 import { ErrorState, LoadingState } from '@/components/dashboard/UiState';
 import { StatusBadge } from '@/components/dashboard/StatusBadge';
 import { dashboardApi, getApiErrorMessage, type RecordFarmActivityInput } from '@/lib/api/dashboardApi';
+import { apiClient } from '@/lib/api/client';
 import type { BatchResponse, FarmActivityItem, TraceResponse } from '@/lib/api/types';
 import { useRoleGuard } from '@/lib/auth/useRoleGuard';
+import { getWeightValidationError, normalizeWeightInput } from '@/lib/validation/weight';
 
 const ACTIVITY_TYPES = [
   'IRRIGATION',
@@ -72,6 +74,11 @@ function isCompleteActivity(activityType: string): boolean {
   return activityType === 'COMPLETE';
 }
 
+function buildQrImageUrl(publicCode: string): string {
+  const baseUrl = apiClient.defaults.baseURL ?? '';
+  return new URL(`/api/qr/${encodeURIComponent(publicCode)}`, baseUrl).toString();
+}
+
 function toEpoch(value?: string): number {
   if (!value) return Number.NaN;
   const ms = Date.parse(value);
@@ -110,6 +117,7 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
   const [form, setForm] = useState<RecordFarmActivityInput>(buildInitialActivity());
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [finalWeightKg, setFinalWeightKg] = useState('');
+  const [qrDownloading, setQrDownloading] = useState(false);
   const sortedActivities = useMemo(() => [...activities].sort(compareActivities), [activities]);
 
   useEffect(() => {
@@ -174,6 +182,15 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
           setError('Bạn cần nhập khối lượng thực tế để hoàn thành batch.');
           return;
         }
+        const weightError = getWeightValidationError(finalWeightKg, 'Khối lượng thực tế');
+        if (weightError) {
+          setError(weightError);
+          return;
+        }
+        if (!evidenceFile) {
+          setError('Bạn cần chọn ảnh minh chứng trước khi hoàn thành batch.');
+          return;
+        }
       }
 
       let payload = { ...form };
@@ -200,7 +217,7 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
       await dashboardApi.recordFarmActivity(params.id, payload);
 
       if (completeMode) {
-        await dashboardApi.updateHarvestStatusWithWeight(params.id, 'COMPLETED', finalWeightKg.trim());
+        await dashboardApi.updateHarvestStatusWithWeight(params.id, 'COMPLETED', normalizeWeightInput(finalWeightKg));
       } else if (shouldAutoProgress(batch)) {
         await dashboardApi.updateHarvestStatus(params.id, 'IN_PROCESS');
       }
@@ -236,6 +253,26 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
       setError(getApiErrorMessage(e));
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function downloadQr() {
+    if (!batch?.publicCode) return;
+    setQrDownloading(true);
+    setError('');
+    try {
+      const url = await dashboardApi.getBatchQrUrl(batch.publicCode);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${batch.publicCode}.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      setError(getApiErrorMessage(e));
+    } finally {
+      setQrDownloading(false);
     }
   }
 
@@ -347,6 +384,9 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
                   <label className="block text-sm">
                     <span className="mb-1 block font-medium text-slate-700">Khối lượng thực tế (kg)</span>
                     <input
+                      type="number"
+                      min="0"
+                      step="any"
                       value={finalWeightKg}
                       onChange={(e) => setFinalWeightKg(e.target.value)}
                       disabled={!isCompleteActivity(form.activityType)}
@@ -389,6 +429,26 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
                 {batch.status === 'TRANSFER_PENDING'
                   ? 'Batch đang chuyển giao, chỉ được xem chi tiết và không thể cập nhật nhật ký canh tác.'
                   : 'Batch đã hoàn thành, chỉ được xem chi tiết và không thể cập nhật nhật ký canh tác.'}
+              </div>
+            )}
+            {batch.status === 'COMPLETED' && (
+              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">QR truy xuất</p>
+                <div className="mt-3 flex flex-col items-center gap-3">
+                  <img
+                    src={buildQrImageUrl(batch.publicCode)}
+                    alt={`QR truy xuất ${batch.publicCode}`}
+                    className="h-48 w-48 rounded-xl border border-amber-200 bg-white p-2"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void downloadQr()}
+                    disabled={qrDownloading}
+                    className="inline-flex w-full items-center justify-center rounded-lg border border-amber-200 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-50"
+                  >
+                    {qrDownloading ? 'Đang tạo QR...' : 'Tải QR truy xuất'}
+                  </button>
+                </div>
               </div>
             )}
             {message && <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</p>}

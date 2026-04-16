@@ -8,6 +8,8 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/dashboard/UiS
 import { StatusBadge } from '@/components/dashboard/StatusBadge';
 import { TraceTimeline } from '@/components/TraceTimeline';
 import { dashboardApi, getApiErrorMessage } from '@/lib/api/dashboardApi';
+import { apiClient } from '@/lib/api/client';
+import { getWeightValidationError, normalizeWeightInput } from '@/lib/validation/weight';
 import type { BatchResponse, BatchStatus, BatchType, TraceResponse } from '@/lib/api/types';
 import type { UserRole } from '@/lib/auth/AuthContext';
 import { useRoleGuard } from '@/lib/auth/useRoleGuard';
@@ -67,6 +69,11 @@ function canUpdateOwnedBatch(role: UserRole, batch: BatchResponse | null): boole
   return false;
 }
 
+function isBatchReadOnlyAfterTransfer(batch: BatchResponse | null): boolean {
+  // Batch TRANSFERRED (đã tiếp nhận chuyển giao) là read-only, chỉ PACKAGER có thể làm việc
+  return batch?.status === 'TRANSFERRED';
+}
+
 function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -75,6 +82,11 @@ function plusDaysIsoDate(days: number): string {
   const date = new Date();
   date.setDate(date.getDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+function buildQrImageUrl(publicCode: string): string {
+  const baseUrl = apiClient.defaults.baseURL ?? '';
+  return new URL(`/api/qr/${encodeURIComponent(publicCode)}`, baseUrl).toString();
 }
 
 export default function BatchUpdatePage() {
@@ -104,6 +116,7 @@ export default function BatchUpdatePage() {
   const [packageEvidenceFile, setPackageEvidenceFile] = useState<File | null>(null);
   const [packagingSubmitting, setPackagingSubmitting] = useState(false);
   const [packagedChild, setPackagedChild] = useState<BatchResponse | null>(null);
+  const [qrDownloading, setQrDownloading] = useState(false);
 
   useEffect(() => {
     if (!message) return;
@@ -214,24 +227,31 @@ export default function BatchUpdatePage() {
       setError('Bạn cần nhập khối lượng thực tế để hoàn thành batch.');
       return;
     }
+    const inlineWeightError = getWeightValidationError(inlineWeightKg, 'Khối lượng thực tế');
+    if (inlineWeightError) {
+      setError(inlineWeightError);
+      return;
+    }
     if (batch.type === 'ROAST' && (!inlineRoastDurationMinutes || !inlineRoastDurationMinutes.trim())) {
       setError('Bạn cần nhập thời gian rang khi hoàn thành batch.');
       return;
     }
+
+    const normalizedWeight = normalizeWeightInput(inlineWeightKg);
 
     setUpdating(true);
     setError('');
     setMessage('');
     try {
       if (batch.type === 'HARVEST') {
-        await dashboardApi.updateHarvestStatusWithWeight(batch.batchId, nextStatus, inlineWeightKg.trim());
+        await dashboardApi.updateHarvestStatusWithWeight(batch.batchId, nextStatus, normalizedWeight);
       } else if (batch.type === 'PROCESSED') {
-        await dashboardApi.updateProcessedStatusWithWeight(batch.batchId, nextStatus, inlineWeightKg.trim());
+        await dashboardApi.updateProcessedStatusWithWeight(batch.batchId, nextStatus, normalizedWeight);
       } else if (batch.type === 'ROAST') {
         await dashboardApi.updateRoastStatusWithWeight(
           batch.batchId,
           nextStatus,
-          inlineWeightKg.trim(),
+          normalizedWeight,
           inlineRoastDurationMinutes.trim(),
         );
       }
@@ -328,9 +348,15 @@ export default function BatchUpdatePage() {
       return;
     }
 
-    const normalizedWeight = packageWeight.trim();
+    const normalizedWeight = normalizeWeightInput(packageWeight);
     if (!normalizedWeight) {
       setError('Vui lòng nhập khối lượng đóng gói.');
+      return;
+    }
+
+    const packageWeightError = getWeightValidationError(normalizedWeight, 'Khối lượng đóng gói');
+    if (packageWeightError) {
+      setError(packageWeightError);
       return;
     }
 
@@ -370,17 +396,20 @@ export default function BatchUpdatePage() {
 
   async function downloadQr() {
     if (!batch) return;
+    setQrDownloading(true);
     try {
-      const url = await dashboardApi.getPackagedQrUrl(batch.batchId);
+      const url = await dashboardApi.getBatchQrUrl(batch.publicCode);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${batch.batchId}.png`;
+      link.download = `${batch.publicCode}.png`;
       document.body.appendChild(link);
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
       setError(getApiErrorMessage(e));
+    } finally {
+      setQrDownloading(false);
     }
   }
 
@@ -424,7 +453,7 @@ export default function BatchUpdatePage() {
               <p><span className="font-medium">Trạng thái:</span> {STATUS_LABELS[batch.status] ?? batch.status}</p>
             </div>
 
-            {((role === 'PROCESSOR' && batch.type === 'PROCESSED') || (role === 'ROASTER' && batch.type === 'ROAST')) && batch.status !== 'COMPLETED' && !isTransferLocked(batch) ? (
+            {((role === 'PROCESSOR' && batch.type === 'PROCESSED') || (role === 'ROASTER' && batch.type === 'ROAST')) && batch.status !== 'COMPLETED' && !isTransferLocked(batch) && !isBatchReadOnlyAfterTransfer(batch) ? (
               <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50/60 p-4">
                 <h3 className="text-sm font-semibold text-amber-900">
                   {batch.type === 'ROAST' ? 'Cập nhật trạng thái rang xay' : 'Cập nhật trạng thái sơ chế'}
@@ -454,6 +483,9 @@ export default function BatchUpdatePage() {
                   <label className="block text-sm">
                     <span className="mb-1 block font-medium text-slate-700">Khối lượng thực tế (kg)</span>
                     <input
+                      type="number"
+                      min="0"
+                      step="any"
                       value={inlineWeightKg}
                       onChange={(e) => setInlineWeightKg(e.target.value)}
                       disabled={nextStatus !== 'COMPLETED'}
@@ -505,7 +537,13 @@ export default function BatchUpdatePage() {
                   </div>
                 )}
 
-                {canUpdateOwnedBatch(role, batch) && (batch.type === 'HARVEST' || batch.type === 'PROCESSED' || batch.type === 'ROAST') && batch.status !== 'COMPLETED' && !isTransferLocked(batch) && (
+                {isBatchReadOnlyAfterTransfer(batch) && role !== 'PACKAGER' && (
+                  <div className="w-full rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Lô đã tiếp nhận chuyển giao. Bạn chỉ có quyền xem chi tiết, không thể chỉnh sửa thêm.
+                  </div>
+                )}
+
+                {canUpdateOwnedBatch(role, batch) && (batch.type === 'HARVEST' || batch.type === 'PROCESSED' || batch.type === 'ROAST') && batch.status !== 'COMPLETED' && !isTransferLocked(batch) && !isBatchReadOnlyAfterTransfer(batch) && (
                   <>
                     <button
                       type="button"
@@ -584,14 +622,14 @@ export default function BatchUpdatePage() {
                   </button>
                 )}
 
-                {batch.type === 'PACKAGED' && (
+                {(batch.type === 'PACKAGED' || batch.status === 'COMPLETED') && (
                   <button
                     type="button"
-                    disabled={updating}
+                    disabled={updating || qrDownloading}
                     onClick={() => void downloadQr()}
                     className="rounded-md border border-amber-200 px-3 py-2 text-xs font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-50"
                   >
-                    Tải QR
+                    {qrDownloading ? 'Đang tạo QR...' : 'Tải QR'}
                   </button>
                 )}
 
@@ -608,6 +646,9 @@ export default function BatchUpdatePage() {
                       <label className="text-xs text-slate-700">
                         <span className="mb-1 block font-medium">Khối lượng đóng gói</span>
                         <input
+                          type="number"
+                          min="0"
+                          step="any"
                           value={packageWeight}
                           onChange={(e) => setPackageWeight(e.target.value)}
                           disabled={packagingSubmitting}
@@ -677,11 +718,33 @@ export default function BatchUpdatePage() {
             {detailLoading && <LoadingState text="Đang tải trace..." />}
             {!detailLoading && detailError && <ErrorState message={detailError} />}
             {!detailLoading && !detailError && detailTrace && (
-              <TraceTimeline
-                batches={[...detailTrace.parentChain, detailTrace.batch]}
-                farmActivities={detailTrace.farmActivities}
-                ledgerRefs={detailTrace.ledgerRefs}
-              />
+              <>
+                <TraceTimeline
+                  batches={[...detailTrace.parentChain, detailTrace.batch]}
+                  farmActivities={detailTrace.farmActivities}
+                  ledgerRefs={detailTrace.ledgerRefs}
+                />
+                {detailTrace.batch.status === 'COMPLETED' && (
+                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">QR truy xuất</p>
+                    <div className="mt-3 flex flex-col items-center gap-3">
+                      <img
+                        src={buildQrImageUrl(detailTrace.batch.publicCode)}
+                        alt={`QR truy xuất ${detailTrace.batch.publicCode}`}
+                        className="h-48 w-48 rounded-xl border border-amber-200 bg-white p-2"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void downloadQr()}
+                        disabled={qrDownloading}
+                        className="inline-flex w-full items-center justify-center rounded-lg border border-amber-200 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-50"
+                      >
+                        {qrDownloading ? 'Đang tạo QR...' : 'Tải QR'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </section>
         </div>
