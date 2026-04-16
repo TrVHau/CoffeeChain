@@ -5,7 +5,8 @@
 
 set -e
 
-PROJECT_ROOT="/media/sagito/SHARED/WINDOW/BTL/ATBM/CoffeeChain"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR"
 NETWORK_DIR="$PROJECT_ROOT/network"
 BACKEND_DIR="$PROJECT_ROOT/backend"
 CHAINCODE_DIR="$PROJECT_ROOT/chaincode"
