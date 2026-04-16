@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -19,8 +19,8 @@ export default function DashboardPage() {
   }, [isHydrated, isAuthenticated, user, router]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-rose-50">
-      <p className="text-sm text-rose-700/70">Đang chuyển hướng...</p>
+    <div className="flex min-h-screen items-center justify-center bg-amber-50">
+      <p className="text-sm text-amber-700/70">Đang chuyển hướng...</p>
     </div>
   );
 }

@@ -768,3 +768,9 @@ components:
               IN_STOCK,
               SOLD,
             ]
+        finalWeightKg:
+          type: string
+          description: Final weight (required when newStatus=COMPLETED for harvest/processed/roast)
+        roastDurationMinutes:
+          type: string
+          description: Roast duration in minutes (required when newStatus=COMPLETED for roast)

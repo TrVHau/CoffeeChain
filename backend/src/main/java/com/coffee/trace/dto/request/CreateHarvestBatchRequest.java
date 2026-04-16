@@ -8,5 +8,5 @@ public class CreateHarvestBatchRequest {
     @NotBlank private String farmLocation;
     @NotBlank private String harvestDate;       // ISO date: yyyy-MM-dd
     @NotBlank private String coffeeVariety;
-    @NotBlank private String weightKg;
+    private String weightKg;
 }

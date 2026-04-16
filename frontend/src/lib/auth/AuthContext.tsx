@@ -27,11 +27,12 @@ interface AuthUser {
   userId: string;
   role: UserRole;
   token: string;
+  org: string;
 }
 
 interface AuthContextType {
   user: AuthUser | null;
-  login: (userId: string, token: string, role: UserRole) => void;
+  login: (userId: string, token: string, role: UserRole, org?: string) => void;
   logout: () => void;
   isAuthenticated: boolean;
   isHydrated: boolean;
@@ -45,6 +46,10 @@ function normalizeToken(token: string): string {
   return token.replace(/^Bearer\s+/i, '').trim();
 }
 
+function roleToOrg(role: UserRole): string {
+  return role === 'PACKAGER' || role === 'RETAILER' ? 'Org2' : 'Org1';
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -53,7 +58,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       try {
-        setUser(JSON.parse(stored) as AuthUser);
+        const parsed = JSON.parse(stored) as Partial<AuthUser>;
+        if (parsed.userId && parsed.role && parsed.token) {
+          setUser({
+            userId: parsed.userId,
+            role: parsed.role,
+            token: parsed.token,
+            org: parsed.org?.trim() || roleToOrg(parsed.role),
+          });
+        } else {
+          localStorage.removeItem(STORAGE_KEY);
+        }
       } catch {
         localStorage.removeItem(STORAGE_KEY);
       }
@@ -61,13 +76,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsHydrated(true);
   }, []);
 
-  const login = (userId: string, token: string, role: UserRole) => {
+  const login = (userId: string, token: string, role: UserRole, org?: string) => {
     const normalizedToken = normalizeToken(token);
-    const authUser: AuthUser = { userId, token: normalizedToken, role };
+    const authUser: AuthUser = {
+      userId,
+      token: normalizedToken,
+      role,
+      org: org?.trim() || roleToOrg(role),
+    };
     setUser(authUser);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(authUser));
     document.cookie = `auth_token=${normalizedToken}; path=/; SameSite=Lax`;
     document.cookie = `user_role=${role}; path=/; SameSite=Lax`;
+    document.cookie = `user_org=${encodeURIComponent(authUser.org)}; path=/; SameSite=Lax`;
   };
 
   const logout = () => {
@@ -75,6 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(STORAGE_KEY);
     document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     document.cookie = 'user_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    document.cookie = 'user_org=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
   };
 
   return (

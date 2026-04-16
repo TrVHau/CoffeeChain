@@ -12,7 +12,13 @@ interface EvidenceVerifierProps {
 
 function ipfsToHttp(uri: string): string {
   if (uri.startsWith('ipfs://')) {
-    return `https://ipfs.io/ipfs/${uri.slice(7)}`;
+    return `http://localhost:8081/ipfs/${uri.slice(7)}`;
+  }
+  if (uri.startsWith('http://ipfs:8081/')) {
+    return uri.replace('http://ipfs:8081/', 'http://localhost:8081/');
+  }
+  if (uri.startsWith('https://ipfs:8081/')) {
+    return uri.replace('https://ipfs:8081/', 'http://localhost:8081/');
   }
   return uri;
 }
@@ -50,40 +56,54 @@ export function EvidenceVerifier({ batchId: _batchId, onChainHash, evidenceUri }
   }
 
   return (
-    <div className="mt-2 flex items-center gap-2">
-      {state === 'idle' && (
-        <button
-          onClick={handleVerify}
-          className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100"
+    <div className="mt-2 space-y-1.5">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+        <a
+          href={ipfsToHttp(evidenceUri)}
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium text-rose-700 underline-offset-2 hover:underline"
         >
-          Xác minh hash chứng cứ
-        </button>
-      )}
+          Xem minh chứng
+        </a>
+        <span className="font-mono">Hash: {onChainHash.slice(0, 12)}...</span>
+      </div>
 
-      {state === 'verifying' && (
-        <span className="animate-pulse text-xs text-slate-500">Đang tải và xác minh...</span>
-      )}
-
-      {state === 'match' && (
-        <span className="text-xs font-medium text-emerald-600">
-          Hash khớp. Chứng cứ xác thực thành công.
-        </span>
-      )}
-
-      {state === 'mismatch' && (
-        <span className="text-xs font-medium text-red-600">
-          Hash không khớp. Dữ liệu có thể đã bị thay đổi.
-        </span>
-      )}
-
-      {state === 'error' && (
-        <span className="text-xs text-orange-600">
-          Lỗi: {errorMsg}{' '}
-          <button onClick={handleVerify} className="underline">
-            Thử lại
+      <div className="flex items-center gap-2">
+        {state === 'idle' && (
+          <button
+            onClick={handleVerify}
+            className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100"
+          >
+            Xác minh hash chứng cứ
           </button>
-        </span>
-      )}
+        )}
+
+        {state === 'verifying' && (
+          <span className="animate-pulse text-xs text-slate-500">Đang tải và xác minh...</span>
+        )}
+
+        {state === 'match' && (
+          <span className="text-xs font-medium text-emerald-600">
+            Hash khớp. Chứng cứ xác thực thành công.
+          </span>
+        )}
+
+        {state === 'mismatch' && (
+          <span className="text-xs font-medium text-red-600">
+            Hash không khớp. Dữ liệu có thể đã bị thay đổi.
+          </span>
+        )}
+
+        {state === 'error' && (
+          <span className="text-xs text-orange-600">
+            Lỗi: {errorMsg}{' '}
+            <button onClick={handleVerify} className="underline">
+              Thử lại
+            </button>
+          </span>
+        )}
+      </div>
     </div>
   );
 }

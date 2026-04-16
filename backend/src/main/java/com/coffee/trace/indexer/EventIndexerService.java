@@ -2,8 +2,6 @@ package com.coffee.trace.indexer;
 
 import com.coffee.trace.entity.BatchEntity;
 import com.coffee.trace.entity.FarmActivityEntity;
-import com.coffee.trace.entity.LedgerRefEntity;
-import java.time.LocalDate;
 import com.coffee.trace.repository.BatchRepository;
 import com.coffee.trace.repository.FarmActivityRepository;
 import com.coffee.trace.repository.LedgerRefRepository;
@@ -12,6 +10,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.hyperledger.fabric.client.ChaincodeEvent;
 import org.hyperledger.fabric.client.CloseableIterator;
 import org.hyperledger.fabric.client.Network;
@@ -20,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -129,20 +129,24 @@ public class EventIndexerService {
 
         log.debug("Event received: {} txId={} block={}", eventName, txId, blockNum);
 
-        // Always record in ledger_refs (append-only audit trail)
-        String batchId = payload.getOrDefault("batchId", payload.getOrDefault("harvestBatchId", ""));
-        ledgerRefRepository.save(batchId, eventName, txId, String.valueOf(blockNum));
-
         switch (eventName) {
             case "BATCH_CREATED"          -> handleBatchCreated(payload, txId, blockNum);
             case "BATCH_STATUS_UPDATED"   -> handleStatusUpdated(payload);
             case "TRANSFER_REQUESTED"     -> handleTransferRequested(payload);
             case "TRANSFER_ACCEPTED"      -> handleTransferAccepted(payload);
             case "EVIDENCE_ADDED"         -> handleEvidenceAdded(payload);
+            case "BATCH_WEIGHT_UPDATED"   -> handleBatchWeightUpdated(payload);
+            case "BATCH_ROAST_DURATION_UPDATED" -> handleRoastDurationUpdated(payload);
             case "FARM_ACTIVITY_RECORDED" -> handleFarmActivity(payload, txId, blockNum);
             case "BATCH_IN_STOCK"         -> handleStatusUpdated(payload);
             case "BATCH_SOLD"             -> handleStatusUpdated(payload);
             default -> log.debug("Unknown event '{}' — recorded in ledger_refs only", eventName);
+        }
+
+        // Record audit trail after state mutations to avoid FK race with BATCH_CREATED.
+        String batchId = payload.getOrDefault("batchId", payload.getOrDefault("harvestBatchId", ""));
+        if (batchId != null && !batchId.isBlank()) {
+            ledgerRefRepository.save(batchId, eventName, txId, String.valueOf(blockNum));
         }
     }
 
@@ -154,6 +158,14 @@ public class EventIndexerService {
             log.debug("BATCH_CREATED: batchId={} already in DB — skipping", batchId);
             return;
         }
+        
+        // Deduplication: check if this transaction has already been processed
+        // Prevents duplicate batch creation from Org1 + Org2 listeners processing same event
+        if (txId != null && !txId.isBlank() && ledgerRefRepository.existsByTxIdAndEventName(txId, "BATCH_CREATED")) {
+            log.debug("BATCH_CREATED duplicate txId={} skipped", txId);
+            return;
+        }
+        
         BatchEntity entity = BatchEntity.builder()
                 .batchId(batchId)
                 .publicCode(p.getOrDefault("publicCode", batchId))
@@ -162,19 +174,50 @@ public class EventIndexerService {
                 .ownerMsp(p.getOrDefault("ownerMSP", ""))
                 .ownerUserId(p.getOrDefault("ownerUserId", ""))
                 .status(p.getOrDefault("status", "CREATED"))
-                .metadata(parseMetadata(p.get("metadata")))
+            .metadata(queryMetadataFromChain(batchId, p.get("metadata")))
                 .createdAt(Instant.now())
                 .updatedAt(Instant.now())
                 .build();
-        batchRepository.save(entity);
-        log.info("BATCH_CREATED: indexed batchId={}", batchId);
+        try {
+            batchRepository.save(entity);
+            log.info("BATCH_CREATED: indexed batchId={}", batchId);
+        } catch (DataIntegrityViolationException e) {
+            // Race condition: both Org1 and Org2 tried to save same batch simultaneously
+            log.debug("BATCH_CREATED duplicate batchId={} caught by unique constraint, silently ignored", batchId);
+        }
     }
 
     private void handleStatusUpdated(Map<String, String> p) {
         String batchId = p.get("batchId");
         String status  = p.get("status");
+        if (status == null || status.isBlank()) {
+            status = p.get("newStatus");
+        }
         if (batchId != null && status != null) {
             batchRepository.updateStatus(batchId, status);
+
+            // Business rule: processed batches only know startDate at creation.
+            // When moved to COMPLETED, automatically stamp endDate in read-model.
+            if ("COMPLETED".equalsIgnoreCase(status)) {
+                batchRepository.findById(batchId).ifPresent(batch -> {
+                    if ("PROCESSED".equalsIgnoreCase(batch.getType())) {
+                        Map<String, String> metadata = batch.getMetadata();
+                        if (metadata == null || metadata.isEmpty()) {
+                            metadata = queryMetadataFromChain(batchId, null);
+                        }
+                        if (metadata != null) {
+                            String endDate = metadata.get("endDate");
+                            if (endDate == null || endDate.isBlank()) {
+                                metadata.put("endDate", LocalDate.now().toString());
+                            }
+                            batch.setMetadata(metadata);
+                            batch.setUpdatedAt(Instant.now());
+                            batchRepository.save(batch);
+                        }
+                    }
+                });
+            }
+
             log.info("STATUS_UPDATED: batchId={} → {}", batchId, status);
         }
     }
@@ -213,6 +256,11 @@ public class EventIndexerService {
     }
 
     private void handleFarmActivity(Map<String, String> p, String txId, long blockNum) {
+        if (txId != null && !txId.isBlank() && farmActivityRepository.existsByTxId(txId)) {
+            log.debug("FARM_ACTIVITY_RECORDED duplicate txId={} skipped", txId);
+            return;
+        }
+
         FarmActivityEntity activity = FarmActivityEntity.builder()
                 .harvestBatchId(p.get("harvestBatchId"))
                 .activityType(p.get("activityType"))
@@ -225,13 +273,64 @@ public class EventIndexerService {
                 .txId(txId)
                 .blockNumber(blockNum)
                 .build();
-        farmActivityRepository.save(activity);
-        log.info("FARM_ACTIVITY_RECORDED: harvestBatchId={} type={}", activity.getHarvestBatchId(), activity.getActivityType());
+        try {
+            farmActivityRepository.save(activity);
+            log.info("FARM_ACTIVITY_RECORDED: harvestBatchId={} type={}", activity.getHarvestBatchId(), activity.getActivityType());
+        } catch (DataIntegrityViolationException e) {
+            log.debug("FARM_ACTIVITY_RECORDED duplicate txId={} ignored", txId);
+        }
+    }
+
+    private void handleBatchWeightUpdated(Map<String, String> p) {
+        String batchId = p.get("batchId");
+        if (batchId == null || batchId.isBlank()) return;
+
+        String weightKey = p.getOrDefault("weightKey", "weightKg");
+        String weightValue = p.getOrDefault("weightValue", "");
+
+        batchRepository.findById(batchId).ifPresent(batch -> {
+            Map<String, String> metadata = batch.getMetadata();
+            if (metadata == null || metadata.isEmpty()) {
+                metadata = queryMetadataFromChain(batchId, null);
+            }
+            if (metadata == null) {
+                metadata = new java.util.HashMap<>();
+            }
+
+            metadata.put(weightKey, weightValue);
+            batch.setMetadata(metadata);
+            batch.setUpdatedAt(Instant.now());
+            batchRepository.save(batch);
+        });
+
+        log.info("BATCH_WEIGHT_UPDATED: batchId={} {}={}", batchId, weightKey, weightValue);
+    }
+
+    private void handleRoastDurationUpdated(Map<String, String> p) {
+        String batchId = p.get("batchId");
+        String roastDurationMinutes = p.getOrDefault("roastDurationMinutes", "");
+        if (batchId == null || batchId.isBlank()) return;
+
+        batchRepository.findById(batchId).ifPresent(batch -> {
+            Map<String, String> metadata = batch.getMetadata();
+            if (metadata == null || metadata.isEmpty()) {
+                metadata = queryMetadataFromChain(batchId, null);
+            }
+            if (metadata == null) {
+                metadata = new java.util.HashMap<>();
+            }
+
+            metadata.put("roastDurationMinutes", roastDurationMinutes);
+            batch.setMetadata(metadata);
+            batch.setUpdatedAt(Instant.now());
+            batchRepository.save(batch);
+        });
+
+        log.info("BATCH_ROAST_DURATION_UPDATED: batchId={} roastDurationMinutes={}", batchId, roastDurationMinutes);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
 
-    @SuppressWarnings("unchecked")
     private Map<String, String> parsePayload(byte[] bytes) throws Exception {
         if (bytes == null || bytes.length == 0) {
             return Map.of();
@@ -239,7 +338,6 @@ public class EventIndexerService {
         return objectMapper.readValue(bytes, new TypeReference<Map<String, String>>() {});
     }
 
-    @SuppressWarnings("unchecked")
     private Map<String, String> parseMetadata(String json) {
         if (json == null || json.isBlank()) return null;
         try {
@@ -248,6 +346,31 @@ public class EventIndexerService {
             log.warn("Could not parse metadata JSON: {}", json);
             return null;
         }
+    }
+
+    private Map<String, String> queryMetadataFromChain(String batchId, String payloadMetadataJson) {
+        Map<String, String> metadata = parseMetadata(payloadMetadataJson);
+        if (metadata != null && !metadata.isEmpty()) {
+            return metadata;
+        }
+        if (batchId == null || batchId.isBlank()) {
+            return metadata;
+        }
+        try {
+            byte[] raw = fabricGateway.evaluateTransaction("Org1", "getBatch", batchId);
+            Map<String, Object> chainBatch = objectMapper.readValue(raw, new TypeReference<Map<String, Object>>() {});
+            Object metaObj = chainBatch.get("metadata");
+            if (metaObj instanceof Map<?, ?> mapObj) {
+                return mapObj.entrySet().stream()
+                        .collect(java.util.stream.Collectors.toMap(
+                                entry -> String.valueOf(entry.getKey()),
+                                entry -> String.valueOf(entry.getValue())
+                        ));
+            }
+        } catch (Exception e) {
+            log.debug("Could not query metadata from chain for batchId={}: {}", batchId, e.getMessage());
+        }
+        return metadata;
     }
 
     private Instant parseInstant(String s) {

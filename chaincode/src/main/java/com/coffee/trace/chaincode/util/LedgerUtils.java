@@ -86,6 +86,12 @@ public class LedgerUtils {
     public static void validateStatusTransition(
             String batchType, String current, String next) {
 
+        if ("PACKAGED".equals(batchType)
+                && "COMPLETED".equals(current)
+                && "IN_STOCK".equals(next)) {
+            return;
+        }
+
         if (("IN_STOCK".equals(next) || "SOLD".equals(next))
                 && !"PACKAGED".equals(batchType)) {
             throw new ChaincodeException(

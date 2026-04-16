@@ -30,15 +30,9 @@ FROM node:21-alpine
 
 WORKDIR /app
 
-# Copy only necessary files from builder
-COPY --from=builder /app/package.json package-lock.json ./
+# Copy only the standalone server and static assets emitted by Next build.
 COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/static ./.next/static
-
-# Install only production dependencies
-RUN npm ci --only=production && \
-    npm cache clean --force
 
 # Environment variables
 ENV NODE_ENV=production

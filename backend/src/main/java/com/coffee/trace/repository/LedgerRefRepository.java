@@ -14,6 +14,8 @@ public interface LedgerRefRepository extends JpaRepository<LedgerRefEntity, Long
 
     Optional<LedgerRefEntity> findTopByBatchIdAndEventNameOrderByCreatedAtDesc(
             String batchId, String eventName);
+    
+    boolean existsByTxIdAndEventName(String txId, String eventName);
 
     default void save(String batchId, String eventName, String txId, String blockNumber) {
         save(LedgerRefEntity.builder()

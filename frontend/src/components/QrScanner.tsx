@@ -6,12 +6,17 @@ import { BrowserMultiFormatReader } from '@zxing/browser';
 
 type ScanState = 'idle' | 'scanning' | 'success' | 'error';
 
+interface QrScannerProps {
+  onCodeDetected?: (code: string) => void;
+  autoNavigate?: boolean;
+}
+
 function extractPublicCode(text: string): string {
   const match = text.match(/\/trace\/([^/?#\s]+)/);
   return match ? match[1] : text.trim();
 }
 
-export function QrScanner() {
+export function QrScanner({ onCodeDetected, autoNavigate = true }: QrScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const router = useRouter();
 
@@ -30,7 +35,12 @@ export function QrScanner() {
         if (result) {
           setState('success');
           const code = extractPublicCode(result.getText());
-          router.push(`/trace/${encodeURIComponent(code)}`);
+          if (onCodeDetected) {
+            onCodeDetected(code);
+          }
+          if (autoNavigate) {
+            router.push(`/trace/${encodeURIComponent(code)}`);
+          }
         }
         if (err && err.name !== 'NotFoundException') {
           setState('error');
@@ -50,7 +60,13 @@ export function QrScanner() {
   function handleManualSubmit(e: React.FormEvent) {
     e.preventDefault();
     const code = manualCode.trim();
-    if (code) router.push(`/trace/${encodeURIComponent(code)}`);
+    if (!code) return;
+    if (onCodeDetected) {
+      onCodeDetected(code);
+    }
+    if (autoNavigate) {
+      router.push(`/trace/${encodeURIComponent(code)}`);
+    }
   }
 
   return (

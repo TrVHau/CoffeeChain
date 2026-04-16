@@ -41,6 +41,8 @@ const batches: BatchResponse[] = [
     ownerMsp: 'Org2MSP',
     ownerUserId: 'packager_dave',
     status: 'SOLD',
+    evidenceHash: 'f'.repeat(64),
+    evidenceUri: 'ipfs://QmPackageProof',
     metadata: {
       packageDate: '2024-03-22',
     },
@@ -120,11 +122,12 @@ describe('TraceTimeline', () => {
     expect(screen.getByText(/tx: tx-water/i)).toBeInTheDocument();
   });
 
-  it('render EvidenceVerifier cho bước ROAST', () => {
+  it('render EvidenceVerifier cho mọi bước có minh chứng', () => {
     render(
       <TraceTimeline batches={batches} farmActivities={farmActivities} ledgerRefs={ledgerRefs} />,
     );
 
-    expect(screen.getByRole('button', { name: /Xác minh hash chứng cứ/i })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /Xác minh hash chứng cứ/i })).toHaveLength(2);
+    expect(screen.getAllByRole('link', { name: /Xem minh chứng/i })).toHaveLength(2);
   });
 });

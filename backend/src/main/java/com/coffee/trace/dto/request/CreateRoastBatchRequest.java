@@ -9,5 +9,5 @@ public class CreateRoastBatchRequest {
     @NotBlank private String roastProfile;          // Light | Medium-Light | Medium | Dark
     @NotBlank private String roastDate;
     @NotBlank private String roastDurationMinutes;
-    @NotBlank private String weightKg;
+    private String weightKg;
 }

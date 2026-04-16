@@ -34,10 +34,12 @@ jest.mock('@/lib/api/dashboardApi', () => ({
     createRoast: jest.fn(),
     updateRoastStatus: jest.fn(),
     addEvidence: jest.fn(),
+    uploadEvidence: jest.fn(),
     requestTransfer: jest.fn(),
     acceptTransfer: jest.fn(),
     createPackaged: jest.fn(),
     updateRetailStatus: jest.fn(),
+    getBatchQrUrl: jest.fn(),
     getPackagedQrUrl: jest.fn(),
   },
   getApiErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'error'),
@@ -93,7 +95,47 @@ describe('dashboard pages smoke', () => {
 
   it('renders farmer detail page', async () => {
     render(<FarmerDetailPage params={{ id: 'B1' }} />);
-    await waitFor(() => expect(screen.getByText('Farmer Batch Detail')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Chi tiết Harvest batch')).toBeInTheDocument());
+  });
+
+  it('renders activity evidence block in farmer detail page', async () => {
+    mockDashboardApi.getTrace.mockResolvedValueOnce({
+      batch: {
+        batchId: 'B1',
+        publicCode: 'HAR-001',
+        type: 'HARVEST',
+        status: 'CREATED',
+        parentBatchId: null,
+        ownerMsp: 'Org1MSP',
+        ownerUserId: 'farmer_alice',
+        pendingToMsp: null,
+        evidenceHash: null,
+        evidenceUri: null,
+        createdAt: '2026-03-15T10:00:00Z',
+        updatedAt: '2026-03-15T10:00:00Z',
+        metadata: {},
+      },
+      parentChain: [],
+      farmActivities: [
+        {
+          activityType: 'IRRIGATION',
+          activityDate: '2026-03-20',
+          note: 'Tưới nhỏ giọt',
+          evidenceHash: 'a'.repeat(64),
+          evidenceUri: 'ipfs://QmActivityEvidence',
+        },
+      ],
+      ledgerRefs: [],
+    });
+
+    render(<FarmerDetailPage params={{ id: 'B1' }} />);
+
+    await waitFor(() => expect(screen.getByRole('link', { name: /Xem minh chứng/i })).toBeInTheDocument());
+    expect(screen.getByText(/Hash:/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Xem minh chứng/i })).toHaveAttribute(
+      'href',
+      'https://ipfs.io/ipfs/QmActivityEvidence',
+    );
   });
 
   it('renders processor dashboard', async () => {

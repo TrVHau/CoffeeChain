@@ -60,17 +60,42 @@ function getActivityIcon(type: string): string {
   return ACTIVITY_ICONS[type.toUpperCase()] ?? '📋';
 }
 
+function parseTime(value: string): number {
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function compareActivitiesDesc(a: FarmActivityItem, b: FarmActivityItem): number {
+  if (typeof a.blockNumber === 'number' && typeof b.blockNumber === 'number' && a.blockNumber !== b.blockNumber) {
+    return b.blockNumber - a.blockNumber;
+  }
+
+  const aRecorded = a.recordedAt ? parseTime(a.recordedAt) : 0;
+  const bRecorded = b.recordedAt ? parseTime(b.recordedAt) : 0;
+  if (aRecorded !== bRecorded) {
+    return bRecorded - aRecorded;
+  }
+
+  const aActivity = a.activityDate ? parseTime(a.activityDate) : 0;
+  const bActivity = b.activityDate ? parseTime(b.activityDate) : 0;
+  if (aActivity !== bActivity) {
+    return bActivity - aActivity;
+  }
+
+  return (b.txId ?? '').localeCompare(a.txId ?? '');
+}
+
 function formatDate(dateStr: string): string {
   if (!dateStr) return '';
-  try {
-    return new Date(dateStr).toLocaleDateString('vi-VN', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    });
-  } catch {
+  const time = parseTime(dateStr);
+  if (time === 0) {
     return dateStr;
   }
+  return new Date(time).toLocaleDateString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
 }
 
 function findLedgerRef(
@@ -78,12 +103,13 @@ function findLedgerRef(
   eventName: string,
   createdAt: string,
 ): LedgerRefItem | undefined {
-  const target = new Date(createdAt).getTime();
+  const target = parseTime(createdAt);
+  if (target === 0) return undefined;
   const candidates = ledgerRefs.filter((r) => r.eventName === eventName);
   if (candidates.length === 0) return undefined;
   return candidates.reduce((best, cur) => {
-    const bestDiff = Math.abs(new Date(best.createdAt).getTime() - target);
-    const curDiff = Math.abs(new Date(cur.createdAt).getTime() - target);
+    const bestDiff = Math.abs(parseTime(best.createdAt) - target);
+    const curDiff = Math.abs(parseTime(cur.createdAt) - target);
     return curDiff < bestDiff ? cur : best;
   });
 }
@@ -91,6 +117,7 @@ function findLedgerRef(
 function FarmActivityLog({ activities }: { activities: FarmActivityItem[] }) {
   const [open, setOpen] = useState(false);
   if (activities.length === 0) return null;
+  const sortedActivities = [...activities].sort(compareActivitiesDesc);
 
   return (
     <div className="mt-3 border-l-2 border-rose-200 pl-3">
@@ -104,7 +131,7 @@ function FarmActivityLog({ activities }: { activities: FarmActivityItem[] }) {
 
       {open && (
         <ul className="mt-2 space-y-2">
-          {activities.map((a, i) => (
+          {sortedActivities.map((a, i) => (
             <li key={i} className="flex items-start gap-2 text-sm">
               <span className="mt-0.5">{getActivityIcon(a.activityType)}</span>
               <div>
@@ -126,7 +153,7 @@ function FarmActivityLog({ activities }: { activities: FarmActivityItem[] }) {
 }
 
 export function TraceTimeline({ batches, farmActivities, ledgerRefs }: TraceTimelineProps) {
-  const steps = [...batches].reverse();
+  const steps = [...batches].sort((left, right) => parseTime(right.createdAt) - parseTime(left.createdAt));
 
   return (
     <div className="relative">
@@ -166,12 +193,15 @@ export function TraceTimeline({ batches, farmActivities, ledgerRefs }: TraceTime
                 </dl>
               )}
 
-              {batch.type === 'ROAST' && batch.evidenceHash && (
-                <EvidenceVerifier
-                  batchId={batch.batchId}
-                  onChainHash={batch.evidenceHash}
-                  evidenceUri={batch.evidenceUri ?? undefined}
-                />
+              {batch.evidenceHash && (
+                <div className="mt-2">
+                  <p className="text-xs font-medium text-slate-500">Minh chứng công đoạn</p>
+                  <EvidenceVerifier
+                    batchId={batch.batchId}
+                    onChainHash={batch.evidenceHash}
+                    evidenceUri={batch.evidenceUri ?? undefined}
+                  />
+                </div>
               )}
 
               {batch.type === 'HARVEST' && <FarmActivityLog activities={farmActivities} />}

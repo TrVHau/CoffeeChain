@@ -1,7 +1,8 @@
 ﻿'use client';
 
 import { useEffect, useState } from 'react';
-import { AxiosError } from 'axios';
+import { ApiError, TraceService } from '@/lib/api/generated';
+import { OpenAPI } from '@/lib/api/generated/core/OpenAPI';
 import { apiClient } from '@/lib/api/client';
 import type { TraceResponse, BatchResponse } from '@/lib/api/types';
 import { TraceTimeline } from '@/components/TraceTimeline';
@@ -11,10 +12,10 @@ function TraceSkeleton() {
     <div className="animate-pulse space-y-4">
       {[1, 2, 3].map((i) => (
         <div key={i} className="flex gap-4">
-          <div className="h-10 w-10 flex-shrink-0 rounded-full bg-rose-200" />
+          <div className="h-10 w-10 flex-shrink-0 rounded-full bg-amber-200" />
           <div className="flex-1 space-y-2 py-1">
-            <div className="h-4 w-1/3 rounded bg-rose-200" />
-            <div className="h-3 w-2/3 rounded bg-rose-100" />
+            <div className="h-4 w-1/3 rounded bg-amber-200" />
+            <div className="h-3 w-2/3 rounded bg-amber-100" />
           </div>
         </div>
       ))}
@@ -26,7 +27,7 @@ const STATUS_LABELS: Record<string, string> = {
   CREATED: 'Đã tạo',
   IN_PROCESS: 'Đang xử lý',
   COMPLETED: 'Hoàn thành',
-  TRANSFER_PENDING: 'Chờ chuyển giao',
+  TRANSFER_PENDING: 'Đang chuyển giao',
   TRANSFERRED: 'Đã chuyển giao',
   IN_STOCK: 'Trong kho',
   SOLD: 'Đã bán',
@@ -39,8 +40,12 @@ const STATUS_COLORS: Record<string, string> = {
   TRANSFER_PENDING: 'bg-amber-100 text-amber-700',
   TRANSFERRED: 'bg-violet-100 text-violet-700',
   IN_STOCK: 'bg-cyan-100 text-cyan-700',
-  SOLD: 'bg-rose-100 text-rose-800',
+  SOLD: 'bg-red-100 text-red-800',
 };
+
+function getApiBaseUrl(): string {
+  return apiClient.defaults.baseURL ?? '';
+}
 
 export default function TracePage({ params }: { params: { publicCode: string } }) {
   const { publicCode } = params;
@@ -52,17 +57,24 @@ export default function TracePage({ params }: { params: { publicCode: string } }
 
   useEffect(() => {
     let cancelled = false;
+    const previousBase = OpenAPI.BASE;
+    OpenAPI.BASE = getApiBaseUrl();
 
-    async function fetchTrace() {
-      setLoading(true);
-      setNotFound(false);
-      setError('');
+    const traceRequest = TraceService.getApiTrace(publicCode);
+    void (async () => {
       try {
-        const res = await apiClient.get<TraceResponse>(`/api/trace/${encodeURIComponent(publicCode)}`);
-        if (!cancelled) setData(res.data);
+        setLoading(true);
+        setNotFound(false);
+        setError('');
+        setData(null);
+        const trace = await traceRequest;
+        if (!trace.batch) {
+          throw new Error('Dữ liệu truy xuất không hợp lệ.');
+        }
+        if (!cancelled) setData(trace as TraceResponse);
       } catch (err) {
         if (cancelled) return;
-        if (err instanceof AxiosError && err.response?.status === 404) {
+        if (err instanceof ApiError && err.status === 404) {
           setNotFound(true);
         } else {
           setError(err instanceof Error ? err.message : 'Không thể tải dữ liệu truy xuất.');
@@ -70,36 +82,36 @@ export default function TracePage({ params }: { params: { publicCode: string } }
       } finally {
         if (!cancelled) setLoading(false);
       }
-    }
+    })();
 
-    void fetchTrace();
     return () => {
       cancelled = true;
+      traceRequest.cancel();
+      OpenAPI.BASE = previousBase;
     };
   }, [publicCode]);
 
   const batches: BatchResponse[] = data ? [...data.parentChain, data.batch] : [];
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-rose-50 via-red-50 to-white px-4 py-12">
-      <div className="mx-auto max-w-3xl rounded-2xl border border-rose-200 bg-white/90 p-6 shadow-lg backdrop-blur">
+    <main className="min-h-screen bg-gradient-to-b from-amber-50 via-orange-50 to-stone-50 px-4 py-12">
+      <div className="mx-auto max-w-3xl rounded-2xl border border-amber-200 bg-white/90 p-6 shadow-lg backdrop-blur">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-rose-900">Truy xuất nguồn gốc</h1>
+          <h1 className="text-2xl font-bold text-stone-900">Truy xuất nguồn gốc</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Mã sản phẩm: <span className="font-mono font-semibold text-rose-700">{publicCode}</span>
+            Mã sản phẩm: <span className="font-mono font-semibold text-amber-800">{publicCode}</span>
           </p>
           {data && (
             <span
-              className={`mt-2 inline-block rounded-full px-3 py-0.5 text-xs font-medium ${
-                STATUS_COLORS[data.batch.status] ?? 'bg-slate-100 text-slate-700'
-              }`}
+              className={`mt-2 inline-block rounded-full px-3 py-0.5 text-xs font-medium ${STATUS_COLORS[data.batch.status] ?? 'bg-slate-100 text-slate-700'
+                }`}
             >
               {STATUS_LABELS[data.batch.status] ?? data.batch.status}
             </span>
           )}
         </div>
 
-        <hr className="mb-6 border-rose-100" />
+        <hr className="mb-6 border-amber-100" />
 
         {loading && <TraceSkeleton />}
 
