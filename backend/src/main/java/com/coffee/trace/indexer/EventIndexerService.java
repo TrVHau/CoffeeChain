@@ -16,6 +16,7 @@ import org.hyperledger.fabric.client.CloseableIterator;
 import org.hyperledger.fabric.client.Network;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -57,6 +58,9 @@ public class EventIndexerService {
 
     private final ExecutorService executor = Executors.newFixedThreadPool(2);
 
+    @Value("${FABRIC_EVENT_INDEXER_ENABLED:true}")
+    private boolean eventIndexerEnabled;
+
     // Keep references to close iterators on shutdown
     private volatile CloseableIterator<ChaincodeEvent> org1EventIterator;
     private volatile CloseableIterator<ChaincodeEvent> org2EventIterator;
@@ -79,6 +83,10 @@ public class EventIndexerService {
      */
     @PostConstruct
     public void startListening() {
+        if (!eventIndexerEnabled) {
+            log.info("EventIndexerService disabled via FABRIC_EVENT_INDEXER_ENABLED=false");
+            return;
+        }
         executor.submit(() -> listenOrg("Org1"));
         executor.submit(() -> listenOrg("Org2"));
         log.info("EventIndexerService started — listening on Org1 and Org2");
