@@ -29,6 +29,7 @@ fabric:
   org1:
     msp-id: Org1MSP
     peer-endpoint: peer0.org1.example.com:7051
+    peer-host-override: ${FABRIC_ORG1_PEER_HOST_OVERRIDE:}
     tls-cert-path: /crypto/org1/tlsca.org1.example.com-cert.pem
     admin-cert-path: /crypto/org1/users/Admin@org1.example.com/msp/signcerts/Admin@org1.example.com-cert.pem
     admin-key-path: /crypto/org1/users/Admin@org1.example.com/msp/keystore/
@@ -36,6 +37,7 @@ fabric:
   org2:
     msp-id: Org2MSP
     peer-endpoint: peer0.org2.example.com:9051
+    peer-host-override: ${FABRIC_ORG2_PEER_HOST_OVERRIDE:}
     tls-cert-path: /crypto/org2/tlsca.org2.example.com-cert.pem
     admin-cert-path: /crypto/org2/users/Admin@org2.example.com/msp/signcerts/Admin@org2.example.com-cert.pem
     admin-key-path: /crypto/org2/users/Admin@org2.example.com/msp/keystore/

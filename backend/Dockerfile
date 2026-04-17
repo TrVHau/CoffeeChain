@@ -13,10 +13,14 @@ WORKDIR /app
 
 # Non-root user for security
 RUN addgroup --system coffeechain && adduser --system --ingroup coffeechain coffeechain
-USER coffeechain
+RUN mkdir -p /crypto && chown -R coffeechain:coffeechain /crypto
 
 COPY --from=build /app/target/coffee-trace-backend-*.jar app.jar
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+USER coffeechain
 
 EXPOSE 8080
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

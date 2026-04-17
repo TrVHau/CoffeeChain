@@ -22,6 +22,7 @@ public class FabricConfig {
     public static class OrgConfig {
         private String mspId;
         private String peerEndpoint;
+        private String peerHostOverride;
         private String tlsCertPath;
         private String adminCertPath;
         private String adminKeyPath;

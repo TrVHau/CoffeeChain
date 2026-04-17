@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.io.ByteArrayInputStream;
 import java.io.Reader;
@@ -123,12 +124,15 @@ public class FabricGatewayService {
     private Gateway buildGateway(String org, Identity identity, PrivateKey privateKey) throws Exception {
         FabricConfig.OrgConfig cfg = fabricConfig.getOrgConfig(org);
         byte[] tlsCert = Files.readAllBytes(Paths.get(cfg.getTlsCertPath()));
-        ManagedChannel channel = NettyChannelBuilder
-                .forTarget(cfg.getPeerEndpoint())
-                .sslContext(GrpcSslContexts.forClient()
-                        .trustManager(new ByteArrayInputStream(tlsCert))
-                        .build())
-                .build();
+        NettyChannelBuilder builder = NettyChannelBuilder
+            .forTarget(cfg.getPeerEndpoint())
+            .sslContext(GrpcSslContexts.forClient()
+                .trustManager(new ByteArrayInputStream(tlsCert))
+                .build());
+        if (StringUtils.hasText(cfg.getPeerHostOverride())) {
+            builder.overrideAuthority(cfg.getPeerHostOverride());
+        }
+        ManagedChannel channel = builder.build();
         return Gateway.newInstance()
                 .identity(identity)
                 .signer(Signers.newPrivateKeySigner(privateKey))
