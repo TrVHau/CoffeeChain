@@ -124,6 +124,18 @@ function isOfflineError(error: unknown): boolean {
   return false;
 }
 
+function canUseMockFallback(): boolean {
+  if (process.env.NODE_ENV !== 'production') {
+    return true;
+  }
+
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+}
+
 export function getApiErrorMessage(error: unknown): string {
   const axiosError = error as AxiosError<{ message?: string; error?: string; details?: string }>;
   if (error instanceof AxiosError || (typeof error === 'object' && error !== null && 'isAxiosError' in error)) {
@@ -204,7 +216,7 @@ async function getList(filters: BatchListFilters = {}): Promise<BatchResponse[]>
     const res = await apiClient.get<unknown[]>('/api/batches', { params: filters });
     return (res.data ?? []).map(normalizeBatch);
   } catch (error) {
-    if (isOfflineError(error)) {
+    if (isOfflineError(error) && canUseMockFallback()) {
       return mockGetList(filters);
     }
     throw error;
@@ -422,7 +434,7 @@ async function getAccountOptions(): Promise<AccountOptions> {
       transferTargets: Array.isArray(row.transferTargets) ? row.transferTargets.map((item) => asString(item)).filter(Boolean) : [],
     };
   } catch (error) {
-    if (isOfflineError(error)) {
+    if (isOfflineError(error) && canUseMockFallback()) {
       return { farmLocations: [], processingFacilities: [], transferTargets: [] };
     }
     throw error;

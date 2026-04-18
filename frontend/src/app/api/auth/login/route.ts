@@ -9,6 +9,10 @@ import { authenticateDevUser } from '@/lib/mock/authMockData';
  */
 
 export async function POST(req: NextRequest) {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ message: 'Mock login is disabled in production.' }, { status: 404 });
+  }
+
   const body = (await req.json()) as { userId?: string; password?: string };
   const { userId, password } = body;
   const result = authenticateDevUser(userId ?? '', password ?? '');
