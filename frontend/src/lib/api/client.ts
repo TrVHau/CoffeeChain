@@ -2,8 +2,41 @@
 
 const STORAGE_KEY = 'auth_user';
 
+function resolveBrowserBaseUrl(): string | undefined {
+  if (typeof window === 'undefined') {
+    return undefined;
+  }
+
+  const { hostname } = window.location;
+
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return 'http://localhost:8080';
+  }
+
+  // Render FE service often uses "<name>-fe.onrender.com" while BE is "<name>.onrender.com".
+  if (hostname.endsWith('-fe.onrender.com')) {
+    return `https://${hostname.replace('-fe.onrender.com', '.onrender.com')}`;
+  }
+
+  return undefined;
+}
+
+function resolveApiBaseUrl(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+  if (fromEnv) {
+    return fromEnv;
+  }
+
+  const fromBrowser = resolveBrowserBaseUrl();
+  if (fromBrowser) {
+    return fromBrowser;
+  }
+
+  return 'http://localhost:8080';
+}
+
 export const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080',
+  baseURL: resolveApiBaseUrl(),
   headers: { 'Content-Type': 'application/json' },
 });
 
