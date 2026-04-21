@@ -7,7 +7,9 @@ import com.coffee.trace.entity.LedgerRefEntity;
 import com.coffee.trace.repository.BatchRepository;
 import com.coffee.trace.repository.FarmActivityRepository;
 import com.coffee.trace.repository.LedgerRefRepository;
+import com.coffee.trace.service.FabricGatewayService;
 import com.coffee.trace.service.QrCodeService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -35,6 +37,10 @@ class TraceControllerTest {
     private LedgerRefRepository ledgerRefRepository;
     @Mock
     private QrCodeService qrCodeService;
+        @Mock
+        private FabricGatewayService fabricGatewayService;
+        @Mock
+        private ObjectMapper objectMapper;
 
     @Test
     void trace_returnsParentChainOldestFirst_andAggregatesRefsAcrossChain() {
@@ -42,7 +48,9 @@ class TraceControllerTest {
                 batchRepository,
                 farmActivityRepository,
                 ledgerRefRepository,
-                qrCodeService
+                qrCodeService,
+                fabricGatewayService,
+                objectMapper
         );
 
         BatchEntity packaged = BatchEntity.builder()
