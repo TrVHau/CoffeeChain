@@ -102,12 +102,6 @@ function toEvidenceHref(uri: string): string {
   if (uri.startsWith('ipfs://')) {
     return `https://ipfs.io/ipfs/${uri.slice(7)}`;
   }
-  const ipfsMarker = '/ipfs/';
-  const markerIndex = uri.indexOf(ipfsMarker);
-  if (markerIndex >= 0) {
-    const path = uri.slice(markerIndex + 1);
-    return `https://ipfs.io/${path}`;
-  }
   return uri;
 }
 

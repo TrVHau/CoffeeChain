@@ -16,12 +16,6 @@ function ipfsToHttp(uri: string): string {
   if (uri.startsWith('https://ipfs:8081/')) {
     return uri.replace('https://ipfs:8081/', 'https://ipfs.io/');
   }
-  const ipfsMarker = '/ipfs/';
-  const markerIndex = uri.indexOf(ipfsMarker);
-  if (markerIndex >= 0) {
-    const path = uri.slice(markerIndex + 1);
-    return `https://ipfs.io/${path}`;
-  }
   return uri;
 }
 
