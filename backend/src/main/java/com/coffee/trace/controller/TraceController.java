@@ -51,6 +51,13 @@ public class TraceController {
         this.objectMapper           = objectMapper;
     }
 
+    public TraceController(BatchRepository batchRepository,
+                           FarmActivityRepository farmActivityRepository,
+                           LedgerRefRepository ledgerRefRepository,
+                           QrCodeService qrCodeService) {
+        this(batchRepository, farmActivityRepository, ledgerRefRepository, qrCodeService, null, null);
+    }
+
     /**
      * GET /api/trace/{publicCode} — public endpoint, no auth required.
      * Returns full provenance chain: current batch + all ancestors + farm activities + ledger refs.
@@ -113,6 +120,9 @@ public class TraceController {
     private BatchEntity enrichEvidenceFromChainIfMissing(BatchEntity batch) {
         if (batch == null) {
             return null;
+        }
+        if (fabricGatewayService == null || objectMapper == null) {
+            return batch;
         }
         if (hasText(batch.getEvidenceHash()) && hasText(batch.getEvidenceUri())) {
             return batch;
