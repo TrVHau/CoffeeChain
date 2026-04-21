@@ -12,13 +12,13 @@ interface EvidenceVerifierProps {
 
 function ipfsToHttp(uri: string): string {
   if (uri.startsWith('ipfs://')) {
-    return `http://localhost:8081/ipfs/${uri.slice(7)}`;
+    return `https://ipfs.io/ipfs/${uri.slice(7)}`;
   }
   if (uri.startsWith('http://ipfs:8081/')) {
-    return uri.replace('http://ipfs:8081/', 'http://localhost:8081/');
+    return uri.replace('http://ipfs:8081/', 'https://ipfs.io/');
   }
   if (uri.startsWith('https://ipfs:8081/')) {
-    return uri.replace('https://ipfs:8081/', 'http://localhost:8081/');
+    return uri.replace('https://ipfs:8081/', 'https://ipfs.io/');
   }
   return uri;
 }
@@ -34,7 +34,7 @@ export function EvidenceVerifier({ batchId: _batchId, onChainHash, evidenceUri }
   const [state, setState] = useState<VerifyState>('idle');
   const [errorMsg, setErrorMsg] = useState('');
 
-  if (!evidenceUri || !onChainHash) {
+  if (!evidenceUri) {
     return <p className="text-xs italic text-slate-400">Chưa có chứng cứ đính kèm</p>;
   }
 
@@ -66,11 +66,13 @@ export function EvidenceVerifier({ batchId: _batchId, onChainHash, evidenceUri }
         >
           Xem minh chứng
         </a>
-        <span className="font-mono">Hash: {onChainHash.slice(0, 12)}...</span>
+        {onChainHash
+          ? <span className="font-mono">Hash: {onChainHash.slice(0, 12)}...</span>
+          : <span className="italic text-slate-400">Chưa có hash on-chain để đối chiếu</span>}
       </div>
 
       <div className="flex items-center gap-2">
-        {state === 'idle' && (
+        {onChainHash && state === 'idle' && (
           <button
             onClick={handleVerify}
             className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100"

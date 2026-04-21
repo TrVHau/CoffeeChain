@@ -98,6 +98,13 @@ function formatDate(dateStr: string): string {
   });
 }
 
+function toEvidenceHref(uri: string): string {
+  if (uri.startsWith('ipfs://')) {
+    return `https://ipfs.io/ipfs/${uri.slice(7)}`;
+  }
+  return uri;
+}
+
 function findLedgerRef(
   ledgerRefs: LedgerRefItem[],
   eventName: string,
@@ -138,6 +145,19 @@ function FarmActivityLog({ activities }: { activities: FarmActivityItem[] }) {
                 <span className="text-slate-500">[{a.activityDate}]</span>{' '}
                 <span className="font-medium">{a.activityType}</span>
                 {a.note && <span className="text-slate-600"> - {a.note}</span>}
+                {a.evidenceUri && (
+                  <>
+                    {' '}
+                    <a
+                      href={toEvidenceHref(a.evidenceUri)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs font-medium text-rose-700 underline-offset-2 hover:underline"
+                    >
+                      Xem ảnh
+                    </a>
+                  </>
+                )}
                 {a.txId && (
                   <span className="ml-2 font-mono text-xs text-rose-600">
                     tx: {a.txId.slice(0, 8)}...
@@ -193,12 +213,12 @@ export function TraceTimeline({ batches, farmActivities, ledgerRefs }: TraceTime
                 </dl>
               )}
 
-              {batch.evidenceHash && (
+              {(batch.evidenceHash || batch.evidenceUri) && (
                 <div className="mt-2">
                   <p className="text-xs font-medium text-slate-500">Minh chứng công đoạn</p>
                   <EvidenceVerifier
                     batchId={batch.batchId}
-                    onChainHash={batch.evidenceHash}
+                    onChainHash={batch.evidenceHash ?? ''}
                     evidenceUri={batch.evidenceUri ?? undefined}
                   />
                 </div>
