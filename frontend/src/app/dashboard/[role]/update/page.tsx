@@ -110,6 +110,7 @@ export default function BatchUpdatePage() {
   const [nextStatus, setNextStatus] = useState<BatchStatus>('IN_PROCESS');
   const [inlineWeightKg, setInlineWeightKg] = useState('');
   const [inlineRoastDurationMinutes, setInlineRoastDurationMinutes] = useState('');
+  const [statusEvidenceFile, setStatusEvidenceFile] = useState<File | null>(null);
   const [roastEvidenceFile, setRoastEvidenceFile] = useState<File | null>(null);
   const [roastEvidenceSubmitting, setRoastEvidenceSubmitting] = useState(false);
   const [transferTargets, setTransferTargets] = useState<string[]>([]);
@@ -213,7 +214,32 @@ export default function BatchUpdatePage() {
       setInlineWeightKg('');
       setInlineRoastDurationMinutes('');
     }
+    setStatusEvidenceFile(null);
   }, [batch]);
+
+  function requiresStatusEvidence(targetBatch: BatchResponse | null): boolean {
+    if (!targetBatch) return false;
+    return targetBatch.type === 'HARVEST' || targetBatch.type === 'PROCESSED' || targetBatch.type === 'ROAST';
+  }
+
+  async function attachEvidenceForBatch(targetBatch: BatchResponse): Promise<void> {
+    if (!statusEvidenceFile) {
+      throw new Error('Vui lòng chọn ảnh minh chứng khi cập nhật trạng thái.');
+    }
+    const uploaded = await dashboardApi.uploadEvidence(statusEvidenceFile);
+
+    if (targetBatch.type === 'HARVEST') {
+      await dashboardApi.addHarvestEvidence(targetBatch.batchId, uploaded);
+      return;
+    }
+    if (targetBatch.type === 'PROCESSED') {
+      await dashboardApi.addProcessedEvidence(targetBatch.batchId, uploaded);
+      return;
+    }
+    if (targetBatch.type === 'ROAST') {
+      await dashboardApi.addEvidence(targetBatch.batchId, uploaded);
+    }
+  }
 
   async function updateWithWeight(nextStatus: BatchStatus) {
     if (!batch) return;
@@ -238,6 +264,10 @@ export default function BatchUpdatePage() {
       setError('Bạn cần nhập thời gian rang khi hoàn thành batch.');
       return;
     }
+    if (requiresStatusEvidence(batch) && !statusEvidenceFile) {
+      setError('Vui lòng chọn ảnh minh chứng khi cập nhật trạng thái.');
+      return;
+    }
 
     const normalizedWeight = normalizeWeightInput(inlineWeightKg);
 
@@ -257,7 +287,11 @@ export default function BatchUpdatePage() {
           inlineRoastDurationMinutes.trim(),
         );
       }
+      if (requiresStatusEvidence(batch)) {
+        await attachEvidenceForBatch(batch);
+      }
       setMessage('Đã cập nhật trạng thái và khối lượng thực tế.');
+      setStatusEvidenceFile(null);
       await refresh();
     } catch (e) {
       setError(getApiErrorMessage(e));
@@ -280,6 +314,10 @@ export default function BatchUpdatePage() {
       await updateWithWeight(nextStatus);
       return;
     }
+    if (requiresStatusEvidence(batch) && !statusEvidenceFile) {
+      setError('Vui lòng chọn ảnh minh chứng khi cập nhật trạng thái.');
+      return;
+    }
 
     setUpdating(true);
     setError('');
@@ -294,7 +332,11 @@ export default function BatchUpdatePage() {
       } else if (batch.type === 'PACKAGED') {
         await dashboardApi.updateRetailStatus(batch.batchId, nextStatus as 'IN_STOCK' | 'SOLD');
       }
+      if (requiresStatusEvidence(batch)) {
+        await attachEvidenceForBatch(batch);
+      }
       setMessage(`Đã cập nhật trạng thái -> ${nextStatus}.`);
+      setStatusEvidenceFile(null);
       await refresh();
     } catch (e) {
       setError(getApiErrorMessage(e));
@@ -480,10 +522,10 @@ export default function BatchUpdatePage() {
               <p><span className="font-medium">Trạng thái:</span> {STATUS_LABELS[batch.status] ?? batch.status}</p>
             </div>
 
-            {((role === 'PROCESSOR' && batch.type === 'PROCESSED') || (role === 'ROASTER' && batch.type === 'ROAST')) && batch.status !== 'COMPLETED' && !isTransferLocked(batch) && !isBatchReadOnlyAfterTransfer(batch) ? (
+            {((role === 'FARMER' && batch.type === 'HARVEST') || (role === 'PROCESSOR' && batch.type === 'PROCESSED') || (role === 'ROASTER' && batch.type === 'ROAST')) && batch.status !== 'COMPLETED' && !isTransferLocked(batch) && !isBatchReadOnlyAfterTransfer(batch) ? (
               <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50/60 p-4">
                 <h3 className="text-sm font-semibold text-amber-900">
-                  {batch.type === 'ROAST' ? 'Cập nhật trạng thái rang xay' : 'Cập nhật trạng thái sơ chế'}
+                  {batch.type === 'ROAST' ? 'Cập nhật trạng thái rang xay' : batch.type === 'PROCESSED' ? 'Cập nhật trạng thái sơ chế' : 'Cập nhật trạng thái thu hoạch'}
                 </h3>
                 <div className="mt-3 space-y-3">
                   <label className="block text-sm">
@@ -534,6 +576,21 @@ export default function BatchUpdatePage() {
                     </label>
                   )}
 
+                  {requiresStatusEvidence(batch) && (
+                    <label className="block text-sm">
+                      <span className="mb-1 block font-medium text-slate-700">Ảnh minh chứng cập nhật trạng thái</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => setStatusEvidenceFile(e.target.files?.[0] ?? null)}
+                        className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
+                      />
+                      {statusEvidenceFile && (
+                        <span className="mt-1 block text-xs text-slate-500">Đã chọn: {statusEvidenceFile.name}</span>
+                      )}
+                    </label>
+                  )}
+
                   <button
                     type="button"
                     disabled={updating}
@@ -552,7 +609,9 @@ export default function BatchUpdatePage() {
                         ? 'Hoàn thành batch'
                         : batch.type === 'ROAST'
                           ? 'Đánh dấu IN_PROGRESS (Rang)'
-                          : 'Đánh dấu IN_PROGRESS'}
+                          : batch.type === 'PROCESSED'
+                            ? 'Đánh dấu IN_PROGRESS (Sơ chế)'
+                            : 'Đánh dấu IN_PROGRESS (Thu hoạch)'}
                   </button>
                 </div>
               </div>
