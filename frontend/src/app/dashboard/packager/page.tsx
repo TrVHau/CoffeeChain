@@ -225,14 +225,24 @@ export default function PackagerDashboardPage() {
                     <p className="text-xs text-slate-500">{item.batchId}</p>
                     <p className="text-xs text-amber-700">Tổ chức nguồn: {item.ownerMsp ?? 'Org1MSP'}</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => void acceptTransfer(item.batchId)}
-                    disabled={acceptingBatchId === item.batchId}
-                    className="rounded-md bg-amber-800 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-amber-900 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {acceptingBatchId === item.batchId ? 'Đang xử lý...' : 'Chấp nhận chuyển giao'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/trace/${encodeURIComponent(item.publicCode)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-md border border-amber-200 bg-white px-2.5 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-50"
+                    >
+                      Xem trace
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => void acceptTransfer(item.batchId)}
+                      disabled={acceptingBatchId === item.batchId}
+                      className="rounded-md bg-amber-800 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-amber-900 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {acceptingBatchId === item.batchId ? 'Đang xử lý...' : 'Chấp nhận chuyển giao'}
+                    </button>
+                  </div>
                 </div>
               ))}
               <div className="mt-2 flex items-center justify-end gap-2">
