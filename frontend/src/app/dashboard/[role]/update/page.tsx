@@ -110,6 +110,8 @@ export default function BatchUpdatePage() {
   const [nextStatus, setNextStatus] = useState<BatchStatus>('IN_PROCESS');
   const [inlineWeightKg, setInlineWeightKg] = useState('');
   const [inlineRoastDurationMinutes, setInlineRoastDurationMinutes] = useState('');
+  const [roastEvidenceFile, setRoastEvidenceFile] = useState<File | null>(null);
+  const [roastEvidenceSubmitting, setRoastEvidenceSubmitting] = useState(false);
   const [transferTargets, setTransferTargets] = useState<string[]>([]);
   const [selectedTransferTarget, setSelectedTransferTarget] = useState('');
   const [packageWeight, setPackageWeight] = useState('');
@@ -333,6 +335,31 @@ export default function BatchUpdatePage() {
     } catch (e) {
       setError(getApiErrorMessage(e));
     } finally {
+      setUpdating(false);
+    }
+  }
+
+  async function uploadRoastEvidence() {
+    if (!batch || batch.type !== 'ROAST') return;
+    if (!roastEvidenceFile) {
+      setError('Vui lòng chọn ảnh minh chứng trước khi tải lên.');
+      return;
+    }
+
+    setRoastEvidenceSubmitting(true);
+    setUpdating(true);
+    setError('');
+    setMessage('');
+    try {
+      const uploaded = await dashboardApi.uploadEvidence(roastEvidenceFile);
+      await dashboardApi.addEvidence(batch.batchId, uploaded);
+      setRoastEvidenceFile(null);
+      setMessage('Đã cập nhật ảnh minh chứng cho khâu rang xay.');
+      await refresh();
+    } catch (e) {
+      setError(getApiErrorMessage(e));
+    } finally {
+      setRoastEvidenceSubmitting(false);
       setUpdating(false);
     }
   }
@@ -586,6 +613,45 @@ export default function BatchUpdatePage() {
                     >
                       Yêu cầu chuyển giao
                     </button>
+                  </div>
+                )}
+
+                {role === 'ROASTER' && batch.type === 'ROAST' && !isTransferLocked(batch) && !isBatchReadOnlyAfterTransfer(batch) && (
+                  <div className="w-full rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Minh chứng rang xay</p>
+                    <div className="grid gap-2">
+                      <label className="text-xs text-slate-700">
+                        <span className="mb-1 block font-medium">Ảnh minh chứng</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          disabled={roastEvidenceSubmitting}
+                          onChange={(e) => setRoastEvidenceFile(e.target.files?.[0] ?? null)}
+                          className="w-full rounded-md border border-amber-200 bg-white px-2 py-1.5 text-xs outline-none ring-amber-400 focus:ring"
+                        />
+                      </label>
+                      {roastEvidenceFile && (
+                        <p className="text-xs text-slate-500">Đã chọn: {roastEvidenceFile.name}</p>
+                      )}
+                      {batch.evidenceUri && (
+                        <a
+                          href={batch.evidenceUri}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="w-fit text-xs font-medium text-amber-700 underline-offset-2 hover:underline"
+                        >
+                          Xem ảnh minh chứng hiện tại
+                        </a>
+                      )}
+                      <button
+                        type="button"
+                        disabled={roastEvidenceSubmitting || !roastEvidenceFile}
+                        onClick={() => void uploadRoastEvidence()}
+                        className="rounded-md bg-amber-700 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
+                      >
+                        {roastEvidenceSubmitting ? 'Đang tải lên...' : 'Cập nhật minh chứng'}
+                      </button>
+                    </div>
                   </div>
                 )}
 
