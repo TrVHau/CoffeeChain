@@ -1,0 +1,350 @@
+{
+  "project": {
+    "name": "CoffeeChain",
+    "description": "Blockchain Coffee Traceability System",
+    "course": "Information Security & Cryptography",
+    "teamSize": 5,
+    "technology": ["Hyperledger Fabric", "Spring Boot", "Next.js", "PostgreSQL", "CouchDB"],
+    "type": "Group Assignment (Bài Tập Lớn)"
+  },
+  "team": {
+    "member_1": {
+      "id": 1,
+      "role": "Farmer (Nông Dân)",
+      "module": "HARVEST",
+      "emoji": "🌱",
+      "assignmentFile": "MEMBER_1_FARMER.md",
+      "backendFiles": [
+        "src/main/java/.../controller/FarmerController.java",
+        "src/main/java/.../entity/FarmActivityEntity.java",
+        "src/main/java/.../repository/FarmActivityRepository.java",
+        "src/main/java/.../dto/CreateHarvestBatchRequest.java",
+        "src/main/java/.../dto/RecordFarmActivityRequest.java"
+      ],
+      "frontendFiles": [
+        "app/dashboard/farmer/page.tsx",
+        "app/dashboard/farmer/[id]/page.tsx",
+        "app/dashboard/farmer/update/page.tsx",
+        "components/FarmActivityLog.tsx"
+      ],
+      "chaincodeFiles": [
+        "chaincode/src/HarvestContract.java (createHarvestBatch, recordFarmActivity, updateBatchStatus)"
+      ],
+      "keyFeatures": [
+        "Create harvest batch",
+        "Record farm activities (emit events)",
+        "Update batch status",
+        "Role-based access (FARMER)"
+      ]
+    },
+    "member_2": {
+      "id": 2,
+      "role": "Processor (Xử Lý)",
+      "module": "PROCESS",
+      "emoji": "🏭",
+      "assignmentFile": "MEMBER_2_PROCESSOR.md",
+      "backendFiles": [
+        "src/main/java/.../controller/ProcessorController.java",
+        "src/main/java/.../dto/CreateProcessedBatchRequest.java"
+      ],
+      "frontendFiles": [
+        "app/dashboard/processor/page.tsx",
+        "app/dashboard/processor/update/page.tsx",
+        "app/dashboard/processor/[id]/page.tsx"
+      ],
+      "chaincodeFiles": [
+        "chaincode/src/ProcessorContract.java (createProcessedBatch, getAvailableHarvestBatches)"
+      ],
+      "keyFeatures": [
+        "View available harvest batches",
+        "Create processed batch (parent validation)",
+        "Weight validation (output < parent)",
+        "Update status"
+      ]
+    },
+    "member_3": {
+      "id": 3,
+      "role": "Roaster (Rang)",
+      "module": "ROAST",
+      "emoji": "🔥",
+      "assignmentFile": "MEMBER_3_ROASTER.md",
+      "backendFiles": [
+        "src/main/java/.../controller/RoasterController.java",
+        "src/main/java/.../service/EvidenceService.java",
+        "src/main/java/.../dto/CreateRoastBatchRequest.java",
+        "src/main/java/.../dto/TransferRequest.java"
+      ],
+      "frontendFiles": [
+        "app/dashboard/roaster/page.tsx",
+        "app/dashboard/roaster/update/page.tsx",
+        "app/dashboard/roaster/[id]/page.tsx",
+        "components/EvidenceVerifier.tsx"
+      ],
+      "chaincodeFiles": [
+        "chaincode/src/RoasterContract.java (createRoastBatch, addEvidence, requestTransfer with SBE)"
+      ],
+      "keyFeatures": [
+        "Create roast batch",
+        "Upload evidence file (IPFS)",
+        "Compute & store SHA-256 hash",
+        "Request transfer (SET STATE-BASED ENDORSEMENT = AND)",
+        "Critical: setStateValidationParameter(batchId, 'AND')"
+      ],
+      "security": ["Evidence verification", "IPFS integration", "AND endorsement setup"]
+    },
+    "member_4": {
+      "id": 4,
+      "role": "Packager (Đóng Gói)",
+      "module": "PACKAGE",
+      "emoji": "📦",
+      "assignmentFile": "MEMBER_4_PACKAGER.md",
+      "backendFiles": [
+        "src/main/java/.../controller/PackagerController.java",
+        "src/main/java/.../service/QrCodeService.java",
+        "src/main/java/.../dto/CreatePackagedBatchRequest.java"
+      ],
+      "frontendFiles": [
+        "app/dashboard/packager/page.tsx",
+        "app/dashboard/packager/create/page.tsx",
+        "app/dashboard/packager/[id]/page.tsx",
+        "components/QrCode.tsx"
+      ],
+      "chaincodeFiles": [
+        "chaincode/src/PackagerContract.java (acceptTransfer with AND endorsement, createPackagedBatch)"
+      ],
+      "keyFeatures": [
+        "List pending transfers (TRANSFER_PENDING)",
+        "Accept transfer (REQUIRES AND ENDORSEMENT from 2 orgs)",
+        "Create packaged batch",
+        "Generate QR code (ZXing library)"
+      ],
+      "security": ["AND endorsement enforcement", "QR code generation for public traceability"]
+    },
+    "member_5": {
+      "id": 5,
+      "role": "Retailer & Public Trace (Bán Lẻ & Công Khai)",
+      "module": "RETAIL + TRACE",
+      "emoji": "🛒",
+      "assignmentFile": "MEMBER_5_RETAILER_TRACE.md",
+      "backendFiles": [
+        "src/main/java/.../controller/RetailerController.java",
+        "src/main/java/.../controller/TraceController.java (PUBLIC - NO AUTH)",
+        "src/main/java/.../service/TraceService.java",
+        "src/main/java/.../dto/TraceResponse.java"
+      ],
+      "frontendFiles": [
+        "app/dashboard/retailer/page.tsx",
+        "app/dashboard/retailer/[id]/page.tsx",
+        "app/trace/[publicCode]/page.tsx (PUBLIC - NO AUTH)",
+        "components/TraceTimeline.tsx",
+        "components/EvidenceVerifier.tsx",
+        "components/FarmActivityLog.tsx"
+      ],
+      "chaincodeFiles": [
+        "chaincode/src/RetailerContract.java (updateBatchStatus, queryBatchByPublicCode, getTraceChain)"
+      ],
+      "keyFeatures": [
+        "Manage retail inventory (IN_STOCK, SOLD)",
+        "Build full chain traversal (Packaged → Harvest)",
+        "Aggregate farm activities & ledger references",
+        "Public trace endpoint (NO AUTHENTICATION)",
+        "Evidence verification (client-side SHA-256)"
+      ],
+      "security": ["Public trace without auth", "Chain traversal logic", "Evidence verification"]
+    }
+  },
+  "documentation": {
+    "primary": {
+      "START_HERE.md": "Quick start guide (10 min) - READ THIS FIRST",
+      "ASSIGNMENT_FOR_TEAM.md": "System architecture & module descriptions (30 min)",
+      "INDEX.md": "File navigation map (5 min)",
+      "PROJECT_OVERVIEW.md": "This overview document (5 min)"
+    },
+    "individual": {
+      "MEMBER_1_FARMER.md": "14.4 KB - Farmer module details",
+      "MEMBER_2_PROCESSOR.md": "10.2 KB - Processor module details",
+      "MEMBER_3_ROASTER.md": "13.9 KB - Roaster + AND endorsement",
+      "MEMBER_4_PACKAGER.md": "13.9 KB - Packager + QR code",
+      "MEMBER_5_RETAILER_TRACE.md": "18.4 KB - Retailer + Public trace"
+    },
+    "reference": {
+      "TEAM_SUMMARY.md": "Summary & quick reference",
+      "CHECKLIST.md": "Progress tracking checklist",
+      "RUN_AND_TEST_FROM_SCRATCH.md": "Setup & deployment guide"
+    }
+  },
+  "security_concepts": {
+    "role_based_access": {
+      "description": "Each user has a role (FARMER/PROCESSOR/ROASTER/PACKAGER/RETAILER) embedded in X.509 certificate",
+      "members": [1, 2, 3, 4, 5],
+      "implementation": "Role extracted from JWT token (read from certificate attribute)"
+    },
+    "and_endorsement": {
+      "description": "State-Based Endorsement: Requires endorsement from both Org1 AND Org2 for transfer acceptance",
+      "setupMember": 3,
+      "enforceMember": 4,
+      "implementation": "Member 3: setStateValidationParameter(batchId, 'AND(...)')",
+      "enforcement": "Member 4: acceptTransfer() cannot proceed without 2 org endorsements"
+    },
+    "evidence_verification": {
+      "description": "SHA-256 hash stored on-chain, file stored on IPFS",
+      "uploadMember": 3,
+      "verifyMember": 5,
+      "clientSideVerification": "Web Crypto API (crypto.subtle.digest)"
+    },
+    "chain_traversal": {
+      "description": "Build full trace by following parentBatchId backwards",
+      "member": 5,
+      "direction": "Reverse: Packaged ← Roast ← Process ← Harvest"
+    },
+    "public_trace": {
+      "description": "No authentication required for public trace endpoint",
+      "member": 5,
+      "endpoint": "GET /api/trace/{publicCode}",
+      "auth": "NONE"
+    }
+  },
+  "business_flow": {
+    "step_1": {
+      "actor": "Farmer (Member 1)",
+      "action": "Create harvest batch + record farm activities",
+      "output": "HARVEST_BATCH (status: COMPLETED)"
+    },
+    "step_2": {
+      "actor": "Processor (Member 2)",
+      "action": "Process parent harvest batch",
+      "input": "HARVEST_BATCH (COMPLETED)",
+      "output": "PROCESSED_BATCH (status: COMPLETED)"
+    },
+    "step_3": {
+      "actor": "Roaster (Member 3)",
+      "action": "Roast + upload evidence + request transfer",
+      "input": "PROCESSED_BATCH (COMPLETED)",
+      "output": "ROAST_BATCH (status: COMPLETED, TRANSFER_PENDING with AND policy)"
+    },
+    "step_4": {
+      "actor": "Packager (Member 4)",
+      "action": "Accept transfer + create packaged batch + generate QR",
+      "input": "ROAST_BATCH (TRANSFER_PENDING)",
+      "output": "PACKAGED_BATCH (status: COMPLETED), QR Code"
+    },
+    "step_5": {
+      "actor": "Retailer (Member 5)",
+      "action": "Manage inventory + provide public trace",
+      "input": "PACKAGED_BATCH",
+      "output": "Status: IN_STOCK → SOLD, Public trace with full chain"
+    }
+  },
+  "directory_structure": {
+    "root_docs": [
+      "INDEX.md",
+      "START_HERE.md",
+      "ASSIGNMENT_FOR_TEAM.md",
+      "PROJECT_OVERVIEW.md",
+      "TEAM_SUMMARY.md",
+      "MEMBER_1_FARMER.md",
+      "MEMBER_2_PROCESSOR.md",
+      "MEMBER_3_ROASTER.md",
+      "MEMBER_4_PACKAGER.md",
+      "MEMBER_5_RETAILER_TRACE.md",
+      "CHECKLIST.md",
+      "RUN_AND_TEST_FROM_SCRATCH.md",
+      "README.md"
+    ],
+    "backend": "backend/ → Spring Boot API server",
+    "frontend": "frontend/ → Next.js web application",
+    "chaincode": "chaincode/ → Hyperledger Fabric smart contracts",
+    "network": "network/ → Docker Compose + Fabric setup"
+  },
+  "getting_started": {
+    "step_1": "Read INDEX.md (this file or similar)",
+    "step_2": "Read START_HERE.md (10 min quick start)",
+    "step_3": "Read ASSIGNMENT_FOR_TEAM.md (architecture overview)",
+    "step_4": "Find your member number (1-5)",
+    "step_5": "Read your MEMBER_X_*.md file (detailed tasks)",
+    "step_6": "Follow RUN_AND_TEST_FROM_SCRATCH.md (setup environment)",
+    "step_7": "Start implementing your module",
+    "step_8": "Track progress in CHECKLIST.md",
+    "step_9": "Prepare presentation slides + Q&A",
+    "step_10": "Demo day!"
+  },
+  "key_files_per_member": {
+    "1": {
+      "documentation": "MEMBER_1_FARMER.md",
+      "backend_controller": "FarmerController.java",
+      "frontend_pages": "/dashboard/farmer/*",
+      "chaincode": "HarvestContract.java"
+    },
+    "2": {
+      "documentation": "MEMBER_2_PROCESSOR.md",
+      "backend_controller": "ProcessorController.java",
+      "frontend_pages": "/dashboard/processor/*",
+      "chaincode": "ProcessorContract.java"
+    },
+    "3": {
+      "documentation": "MEMBER_3_ROASTER.md",
+      "backend_controller": "RoasterController.java",
+      "backend_service": "EvidenceService.java",
+      "frontend_pages": "/dashboard/roaster/*",
+      "chaincode": "RoasterContract.java (requestTransfer with SBE)",
+      "critical": "setStateValidationParameter() - AND endorsement"
+    },
+    "4": {
+      "documentation": "MEMBER_4_PACKAGER.md",
+      "backend_controller": "PackagerController.java",
+      "backend_service": "QrCodeService.java",
+      "frontend_pages": "/dashboard/packager/*",
+      "chaincode": "PackagerContract.java (acceptTransfer with AND endorsement)",
+      "critical": "acceptTransfer() - requires 2 org endorsement"
+    },
+    "5": {
+      "documentation": "MEMBER_5_RETAILER_TRACE.md",
+      "backend_controller": "RetailerController.java, TraceController.java (PUBLIC)",
+      "backend_service": "TraceService.java",
+      "frontend_pages": "/dashboard/retailer/*, /trace/[publicCode]/* (PUBLIC)",
+      "chaincode": "RetailerContract.java (getTraceChain, queryBatchByPublicCode)",
+      "critical": "Public trace - NO authentication required"
+    }
+  },
+  "timeline": {
+    "week_1": {
+      "days_1_2": "Read all documentation",
+      "days_3_4": "Setup environment",
+      "days_5_7": "Each member studies their module"
+    },
+    "week_2": {
+      "days_1_3": "Implement backend + frontend",
+      "days_4_5": "Implement chaincode",
+      "days_6_7": "Testing + bug fixes"
+    },
+    "week_3": {
+      "days_1_3": "Team integration testing",
+      "days_4_5": "Bug fixes + performance",
+      "days_6_7": "Prepare presentation"
+    }
+  },
+  "learning_objectives": [
+    "Blockchain fundamentals (chaincode, state transitions, events)",
+    "Cryptography (X.509 certs, PKI, hash verification)",
+    "Authorization (role-based access, endorsement policies)",
+    "Distributed systems (consensus, chain traversal)",
+    "Full-stack development (Spring Boot, Next.js, Fabric, PostgreSQL)"
+  ],
+  "success_metrics": {
+    "individual": [
+      "Code compiles & passes tests",
+      "Can explain every line",
+      "Presentation: 5-10 slides, 10-15 min",
+      "Live demo works",
+      "Confident Q&A"
+    ],
+    "team": [
+      "All 5 modules integrated",
+      "End-to-end flow working",
+      "AND endorsement correct",
+      "Evidence verification working",
+      "Public trace accessible",
+      "Full chain traceability"
+    ]
+  }
+}

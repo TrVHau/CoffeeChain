@@ -9,7 +9,8 @@ Tai lieu nay la huong dan DUY NHAT de:
 ## 1. Data Dang Luu O Dau?
 
 ### 1.1 Ma nguon (source code)
-- Dang nam tren o share: `/media/sagito/SHARED/WINDOW/BTL/ATBM/CoffeeChain`
+- Windows path hien tai: `E:\WINDOW\BTL\CoffeeChain`
+- Neu chay trong WSL, path tuong ung thuong la: `/mnt/e/WINDOW/BTL/CoffeeChain`
 - Day la noi luu code + docs + scripts
 
 ### 1.2 Fabric crypto va channel artifacts runtime
@@ -33,7 +34,7 @@ Tai lieu nay la huong dan DUY NHAT de:
 ### 1.4 Lenh kiem tra dung luong nhanh
 ```bash
 # Tong dung luong workspace
-cd /media/sagito/SHARED/WINDOW/BTL/ATBM/CoffeeChain
+cd /mnt/e/WINDOW/BTL/CoffeeChain
 du -sh .
 
 # Temp data cua project
@@ -50,7 +51,7 @@ docker volume ls --format '{{.Name}}' | grep '^network_'
 
 Chay tu root project:
 ```bash
-cd /media/sagito/SHARED/WINDOW/BTL/ATBM/CoffeeChain
+cd /mnt/e/WINDOW/BTL/CoffeeChain
 ```
 
 ### 2.1 Stop va xoa container/volume cua stack
@@ -68,7 +69,7 @@ sudo rm -rf /tmp/coffeechain-crypto /tmp/coffeechain-artifacts /tmp/coffee-ca-cl
 
 ### 2.3 Xoa build artifacts trong source tree
 ```bash
-cd /media/sagito/SHARED/WINDOW/BTL/ATBM/CoffeeChain
+cd /mnt/e/WINDOW/BTL/CoffeeChain
 rm -rf chaincode/build chaincode/.gradle backend/target frontend/.next
 ```
 

@@ -1,7 +1,7 @@
 # Hướng Dẫn Đóng Góp — CoffeeChain
 
 > Đọc kỹ trước khi bắt đầu code. Mọi thành viên **bắt buộc** tuân theo.  
-> Tài liệu chuẩn chi tiết hơn: [`docs/DEV_STANDARDS.md`](docs/DEV_STANDARDS.md)
+> Tài liệu tham khảo: [`START_HERE.md`](START_HERE.md), [`ASSIGNMENT_FOR_TEAM.md`](ASSIGNMENT_FOR_TEAM.md), và [`RUN_AND_TEST_FROM_SCRATCH.md`](RUN_AND_TEST_FROM_SCRATCH.md)
 
 ---
 
@@ -224,17 +224,6 @@ coffee-traceability/              ← PROJECT ROOT
 │       ├── deploy-chaincode.sh
 │       └── register-users.sh
 │
-├── docs/                         ← Tài liệu kỹ thuật (đọc không sửa)
-│   ├── 00_overview.md
-│   ├── 01_system_architecture.md
-│   ├── 02_roles_and_orgs.md
-│   ├── 03_data_model.md
-│   ├── 04_chaincode.md
-│   ├── 05_backend.md
-│   ├── 06_frontend_qr.md
-│   ├── 07_deployment.md
-│   └── DEV_STANDARDS.md          ← ← Quy chuẩn (file này)
-│
 ├── aidlc-docs/                   ← AI-DLC artifacts (không sửa thủ công)
 ├── CONTRIBUTING.md               ← File này
 └── .gitignore
@@ -282,7 +271,7 @@ coffee-traceability/              ← PROJECT ROOT
 Chi tiết tại:
 - Network: [`network/README.md`](network/README.md)
 - Backend: [`backend/README.md`](backend/README.md)
-- Frontend: [`frontend/README.md`](frontend/README.md)
+- Frontend: [`frontend/package.json`](frontend/package.json), `frontend/src/app/`, và `frontend/src/components/`
 
 ### Yêu cầu tối thiểu
 
@@ -309,7 +298,7 @@ Chi tiết tại:
 
 - [ ] Code compile / build không lỗi
 - [ ] Đặt file đúng thư mục theo phân công
-- [ ] Đặt tên class/file/variable theo `docs/DEV_STANDARDS.md`
+- [ ] Đặt tên class/file/variable theo backend/src hoặc frontend/src convention
 - [ ] Không có hardcoded credentials, secrets, hay localhost URL
 - [ ] Không có debug code (`System.out.println`, `console.log` không cần thiết)
 - [ ] Exception/error được handle, không để swallow lặng lẽ
