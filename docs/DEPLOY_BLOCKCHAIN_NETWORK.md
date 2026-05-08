@@ -148,6 +148,26 @@ Cấu hình tối thiểu:
 - `TRACE_PUBLIC_BASE_URL=https://<frontend-domain>/trace/`
 - `NEXT_PUBLIC_API_URL=https://<backend-domain>`
 
+## 9A) Nếu không có credit card
+
+Nếu tài khoản Oracle/Cloud yêu cầu credit card mà nhóm chưa có, đừng cố đăng ký vòng qua. Với project bài tập, phương án khả thi nhất là:
+
+1. Chạy toàn bộ Fabric network trên máy cá nhân mạnh hoặc máy lab của nhóm.
+2. Dùng Docker Compose đúng theo `network/docker-compose.yaml` và `run.sh`.
+3. Nếu cần public tạm cho demo, dùng Cloudflare Tunnel free hoặc ngrok free chỉ để expose frontend/backend, còn Fabric network vẫn nằm trong máy/lab.
+4. Giữ `TRACE_PUBLIC_BASE_URL` và `NEXT_PUBLIC_API_URL` trỏ về domain/tunnel thật thay vì localhost.
+
+Ưu điểm:
+- Không cần credit card
+- Không bị khóa bởi bước xác minh cloud
+- Phù hợp với bài tập nhóm và demo nội bộ
+
+Nhược điểm:
+- Không phải hạ tầng cloud “chuẩn production” 24/7
+- Phụ thuộc máy/lab của nhóm hoặc laptop phải bật khi demo
+
+Nếu mục tiêu là nộp bài và demo, phương án này đủ dùng. Nếu mục tiêu là triển khai public thật sự, lúc đó mới cần một VM cloud có thẻ hoặc tài khoản tổ chức.
+
 ## 10) Rollback nhanh
 
 Nếu deploy lỗi:

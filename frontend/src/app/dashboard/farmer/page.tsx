@@ -41,6 +41,15 @@ const STATUS_ACTION_LABELS: Partial<Record<BatchStatus, string>> = {
 
 const PAGE_SIZE_OPTIONS = [10, 20] as const;
 
+function deriveFarmLocationsFromBatches(items: BatchResponse[]): string[] {
+  const unique = new Set<string>();
+  for (const item of items) {
+    const candidate = item.metadata?.farmLocation?.trim();
+    if (candidate) unique.add(candidate);
+  }
+  return Array.from(unique);
+}
+
 export default function FarmerDashboardPage() {
   const { ready } = useRoleGuard('FARMER');
   const [loading, setLoading] = useState(true);
@@ -73,27 +82,33 @@ export default function FarmerDashboardPage() {
         dashboardApi.getAccountOptions(),
       ]);
 
-      setFarmLocationOptions(accountOptions.farmLocations);
-      if (!form.farmLocation && accountOptions.farmLocations.length > 0) {
-        setForm((prev) => ({ ...prev, farmLocation: accountOptions.farmLocations[0] }));
-      }
-        // Enrich batches with metadata from chain if not in DB
-        const enriched = await Promise.all(
-          list.map(async (batch) => {
-            // If metadata is empty, try to get it from chain
-            if (!batch.metadata || Object.keys(batch.metadata).length === 0) {
-              try {
-                const chainBatch = await dashboardApi.getBatchByIdChain(batch.batchId);
-                return { ...batch, metadata: chainBatch.metadata };
-              } catch (e) {
-                // Chain query failed, return batch as-is
-                return batch;
-              }
+      // Enrich batches with metadata from chain if not in DB
+      const enriched = await Promise.all(
+        list.map(async (batch) => {
+          // If metadata is empty, try to get it from chain
+          if (!batch.metadata || Object.keys(batch.metadata).length === 0) {
+            try {
+              const chainBatch = await dashboardApi.getBatchByIdChain(batch.batchId);
+              return { ...batch, metadata: chainBatch.metadata };
+            } catch (e) {
+              // Chain query failed, return batch as-is
+              return batch;
             }
-            return batch;
-          }),
-        );
-        setBatches(enriched);
+          }
+          return batch;
+        }),
+      );
+      setBatches(enriched);
+
+      const derivedLocations = deriveFarmLocationsFromBatches(enriched);
+      const mergedLocations = accountOptions.farmLocations.length > 0
+        ? accountOptions.farmLocations
+        : derivedLocations;
+
+      setFarmLocationOptions(mergedLocations);
+      if (!form.farmLocation && mergedLocations.length > 0) {
+        setForm((prev) => ({ ...prev, farmLocation: mergedLocations[0] }));
+      }
     } catch (e) {
       setError(getApiErrorMessage(e));
     } finally {
