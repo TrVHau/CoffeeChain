@@ -15,6 +15,7 @@ const INITIAL_FORM: CreateHarvestInput = {
   harvestDate: '',
   coffeeVariety: '',
   weightKg: '',
+  actualDate: '',
 };
 
 function getTodayDate(): string {
@@ -25,6 +26,7 @@ function buildInitialForm(): CreateHarvestInput {
   return {
     ...INITIAL_FORM,
     harvestDate: getTodayDate(),
+    actualDate: getTodayDate(),
   };
 }
 
@@ -222,11 +224,20 @@ export default function FarmerDashboardPage() {
               </select>
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block font-medium text-slate-700">Ngày thu hoạch (tự động)</span>
+              <span className="mb-1 block font-medium text-slate-700">Ngày ghi nhận (tự động)</span>
               <input
                 type="text"
                 value={form.harvestDate}
                 readOnly
+                className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium text-slate-700">Ngày thu hoạch thực tế</span>
+              <input
+                type="date"
+                value={form.actualDate ?? form.harvestDate}
+                onChange={(e) => setForm((p) => ({ ...p, actualDate: e.target.value }))}
                 className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
               />
             </label>

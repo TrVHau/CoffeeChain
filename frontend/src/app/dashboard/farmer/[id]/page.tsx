@@ -202,10 +202,9 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
           note: baseNote ? `[COMPLETE] ${baseNote}` : '[COMPLETE] Hoàn thành batch',
         };
       }
-      payload = {
-        ...payload,
-        activityDate: getTodayDate(),
-      };
+      if (!payload.activityDate) {
+        payload = { ...payload, activityDate: getTodayDate() };
+      }
       if (evidenceFile) {
         const evidence = await dashboardApi.uploadEvidence(evidenceFile);
         payload = {
@@ -299,7 +298,6 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
           <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
             <h2 className="text-base font-semibold text-amber-900">Thông tin canh tác</h2>
             <dl className="mt-4 space-y-4 text-sm">
-              {/* Main harvest info - always show */}
               {batch.metadata?.farmLocation ? (
                 <div className="border-b border-amber-100 pb-3">
                   <dt className="font-medium text-slate-500 text-xs uppercase tracking-wide">Địa điểm nông trại</dt>
@@ -328,15 +326,13 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
                 </div>
               ) : null}
               
-              {/* Status */}
               <div className="pt-2">
                 <dt className="font-medium text-slate-500 text-xs uppercase tracking-wide">Trạng thái</dt>
                 <dd className="pt-2"><StatusBadge status={batch.status} /></dd>
               </div>
               
-              {/* Technical details in smaller section */}
               <div className="border-t border-slate-200 pt-3 mt-3">
-                <dt className="font-medium text-slate-500 text-xs">Chi tiết kỹ thuật</dt>
+                <dt className="font-medium text-slate-500 text-xs">Thông tin lô</dt>
                 <dd className="mt-2 space-y-1 text-xs text-slate-600">
                   <p><span className="font-medium">Mã công khai:</span> {batch.publicCode}</p>
                   <p><span className="font-medium">ID:</span> {batch.batchId.slice(0, 16)}...</p>
@@ -370,14 +366,23 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
                     </select>
                   </label>
                   <p className="text-xs text-slate-500">
-                    Chọn một hoạt động thường để tự chuyển batch sang IN_PROCESS, hoặc chọn COMPLETE để chốt batch và khóa cập nhật tiếp theo.
+                    Chọn hoạt động thường để chứng nhận quá trình canh tác, hoặc chọn COMPLETE để chốt và khóa batch.
                   </p>
                   <label className="block text-sm">
-                    <span className="mb-1 block font-medium text-slate-700">Ngày thực hiện (tự động)</span>
+                    <span className="mb-1 block font-medium text-slate-700">Ngày ghi nhận (tự động)</span>
                     <input
                       type="text"
                       value={form.activityDate}
                       readOnly
+                      className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
+                    />
+                  </label>
+                  <label className="block text-sm">
+                    <span className="mb-1 block font-medium text-slate-700">Ngày thực hiện thực tế</span>
+                    <input
+                      type="date"
+                      value={form.activityDate}
+                      onChange={(e) => setForm((p) => ({ ...p, activityDate: e.target.value }))}
                       className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
                     />
                   </label>
@@ -467,7 +472,9 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
                       <p className="text-sm font-semibold text-slate-800">{activity.activityType}</p>
                       <p className="text-xs text-slate-600">Ngày: {activity.activityDate}</p>
                     </div>
-                    <p className="text-xs text-slate-500 text-right">Theo dõi Block</p>
+                    <p className="text-xs text-slate-500 text-right">
+                      Block #{activity.blockNumber ?? '—'}
+                    </p>
                   </div>
                   {activity.note && <p className="mt-2 text-sm text-slate-700">Ghi chú: {activity.note}</p>}
                   {(activity.evidenceUri || activity.evidenceHash) && (

@@ -253,12 +253,11 @@ export default function HomePage() {
               onChange={(e) => setStageFilter(e.target.value as StageFilter)}
               className="rounded-lg border border-amber-200 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none"
             >
-              <option value="ALL">Tất cả stage</option>
-              <option value="HARVEST">HARVEST</option>
-              <option value="PROCESSED">PROCESSED</option>
-              <option value="ROAST">ROAST</option>
-              <option value="PACKAGED">PACKAGED</option>
-              <option value="RETAIL">RETAIL</option>
+              <option value="ALL">Tất cả giai đoạn</option>
+              <option value="HARVEST">Thu hoạch</option>
+              <option value="PROCESSED">Sơ chế</option>
+              <option value="ROAST">Rang xay</option>
+              <option value="PACKAGED">Đóng gói</option>
             </select>
             <button
               type="button"
@@ -413,9 +412,7 @@ export default function HomePage() {
         </article>
       </section>
 
-      <p className="mx-auto mt-5 w-full max-w-6xl px-4 text-xs text-gray-500 md:px-6">
-        Đăng nhập sẽ chuyển sang khu vực thao tác nghiệp vụ dashboard (phần việc người 4) như luồng cũ.
-      </p>
+
     </main>
   );
 }

@@ -26,10 +26,10 @@ const STATUS_LABELS: Record<BatchStatus, string> = {
 
 function formatType(type: BatchType): string {
   return {
-    HARVEST: 'Harvest',
-    PROCESSED: 'Processed',
-    ROAST: 'Roast',
-    PACKAGED: 'Packaged',
+    HARVEST: 'Thu hoạch',
+    PROCESSED: 'Sơ chế',
+    ROAST: 'Rang xay',
+    PACKAGED: 'Đóng gói',
   }[type];
 }
 
@@ -120,6 +120,7 @@ export default function BatchUpdatePage() {
   const [packagingSubmitting, setPackagingSubmitting] = useState(false);
   const [packagedChild, setPackagedChild] = useState<BatchResponse | null>(null);
   const [qrDownloading, setQrDownloading] = useState(false);
+  const [actualDate, setActualDate] = useState(todayIsoDate);
 
   useEffect(() => {
     if (!message) return;
@@ -516,7 +517,7 @@ export default function BatchUpdatePage() {
             </div>
 
             <div className="space-y-2 text-sm text-slate-700">
-              <p><span className="font-medium">Owner:</span> {batch.ownerMsp}</p>
+              <p><span className="font-medium">Tổ chức:</span> {batch.ownerMsp}</p>
               <p><span className="font-medium">Người dùng:</span> {batch.ownerUserId}</p>
               <p><span className="font-medium">Cập nhật:</span> {new Date(batch.updatedAt).toLocaleString('vi-VN')}</p>
               <p><span className="font-medium">Trạng thái:</span> {STATUS_LABELS[batch.status] ?? batch.status}</p>
@@ -543,7 +544,7 @@ export default function BatchUpdatePage() {
                     >
                       {getInlineStatusOptions(batch).map((option) => (
                         <option key={option} value={option}>
-                          {option === 'IN_PROCESS' ? 'Đánh dấu IN_PROGRESS' : 'Đánh dấu COMPLETED'}
+                          {option === 'IN_PROCESS' ? 'Bắt đầu xử lý' : 'Hoàn thành'}
                         </option>
                       ))}
                     </select>
@@ -558,7 +559,7 @@ export default function BatchUpdatePage() {
                       value={inlineWeightKg}
                       onChange={(e) => setInlineWeightKg(e.target.value)}
                       disabled={nextStatus !== 'COMPLETED'}
-                      placeholder="Chỉ nhập khi chọn COMPLETED"
+                      placeholder="Chỉ nhập khi chọn Hoàn thành"
                       className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring disabled:bg-slate-100 disabled:text-slate-500"
                     />
                   </label>
@@ -570,7 +571,7 @@ export default function BatchUpdatePage() {
                         value={inlineRoastDurationMinutes}
                         onChange={(e) => setInlineRoastDurationMinutes(e.target.value)}
                         disabled={nextStatus !== 'COMPLETED'}
-                        placeholder="Chỉ nhập khi chọn COMPLETED"
+                        placeholder="Chỉ nhập khi chọn Hoàn thành"
                         className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring disabled:bg-slate-100 disabled:text-slate-500"
                       />
                     </label>
@@ -578,7 +579,29 @@ export default function BatchUpdatePage() {
 
                   {requiresStatusEvidence(batch) && (
                     <label className="block text-sm">
-                      <span className="mb-1 block font-medium text-slate-700">Ảnh minh chứng cập nhật trạng thái</span>
+                      <span className="mb-1 block font-medium text-slate-700">Ngày ghi nhận (tự động)</span>
+                      <input
+                        type="text"
+                        value={todayIsoDate()}
+                        readOnly
+                        className="w-full rounded-lg border border-amber-200 bg-slate-50 px-3 py-2 text-xs text-slate-500"
+                      />
+                    </label>
+                  )}
+                  {requiresStatusEvidence(batch) && (
+                    <label className="block text-sm">
+                      <span className="mb-1 block font-medium text-slate-700">Ngày thực hiện thực tế</span>
+                      <input
+                        type="date"
+                        value={actualDate}
+                        onChange={(e) => setActualDate(e.target.value)}
+                        className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
+                      />
+                    </label>
+                  )}
+                  {requiresStatusEvidence(batch) && (
+                    <label className="block text-sm">
+                      <span className="mb-1 block font-medium text-slate-700">Ảnh minh chứng</span>
                       <input
                         type="file"
                         accept="image/*"
@@ -606,12 +629,12 @@ export default function BatchUpdatePage() {
                     {updating
                       ? 'Đang cập nhật...'
                       : nextStatus === 'COMPLETED'
-                        ? 'Hoàn thành batch'
+                        ? 'Hoàn thành'
                         : batch.type === 'ROAST'
-                          ? 'Đánh dấu IN_PROGRESS (Rang)'
+                          ? 'Bắt đầu rang'
                           : batch.type === 'PROCESSED'
-                            ? 'Đánh dấu IN_PROGRESS (Sơ chế)'
-                            : 'Đánh dấu IN_PROGRESS (Thu hoạch)'}
+                            ? 'Bắt đầu sơ chế'
+                            : 'Bắt đầu xử lý'}
                   </button>
                 </div>
               </div>
@@ -637,7 +660,7 @@ export default function BatchUpdatePage() {
                       onClick={() => void updateStatus('IN_PROCESS')}
                       className="rounded-md bg-amber-100 px-3 py-2 text-xs font-medium text-amber-700 hover:bg-amber-200 disabled:opacity-50"
                     >
-                      Đánh dấu IN_PROGRESS
+                      Bắt đầu xử lý
                     </button>
                     <button
                       type="button"
@@ -645,7 +668,7 @@ export default function BatchUpdatePage() {
                       onClick={() => void updateStatus('COMPLETED')}
                       className="rounded-md bg-emerald-100 px-3 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-200 disabled:opacity-50"
                     >
-                      Đánh dấu COMPLETED
+                      Hoàn thành
                     </button>
                   </>
                 )}
@@ -732,7 +755,7 @@ export default function BatchUpdatePage() {
                     onClick={() => void updateStatus('IN_STOCK')}
                     className="rounded-md bg-cyan-100 px-3 py-2 text-xs font-medium text-cyan-700 hover:bg-cyan-200 disabled:opacity-50"
                   >
-                    Chuyển sang IN_STOCK
+                    Chuyển sang Trong kho
                   </button>
                 )}
 
@@ -743,7 +766,7 @@ export default function BatchUpdatePage() {
                     onClick={() => void updateStatus('SOLD')}
                     className="rounded-md bg-amber-100 px-3 py-2 text-xs font-medium text-amber-700 hover:bg-amber-200 disabled:opacity-50"
                   >
-                    Đánh dấu SOLD
+                    Đánh dấu Đã bán
                   </button>
                 )}
 
@@ -760,7 +783,7 @@ export default function BatchUpdatePage() {
 
                 {role === 'PACKAGER' && batch.type !== 'PACKAGED' && (
                   <div className="w-full rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                    Vai trò PACKAGER chỉ xem chi tiết tại trang này; thao tác chuyển trạng thái của lô này thuộc vai trò khác.
+                    Bạn đang xem chi tiết lô này với tư cách kiểm tra. Việc đóng gói sẽ thực hiện ở bước tiếp theo khi lô đã được chuyển giao.
                   </div>
                 )}
 

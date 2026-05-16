@@ -52,6 +52,7 @@ export default function PackagerDashboardPage() {
   const [selectedCode, setSelectedCode] = useState('');
   const [detailTrace, setDetailTrace] = useState<TraceResponse | null>(null);
   const [acceptingBatchId, setAcceptingBatchId] = useState<string | null>(null);
+  const [qrImageUrl, setQrImageUrl] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pendingPage, setPendingPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(10);
@@ -167,9 +168,18 @@ export default function PackagerDashboardPage() {
     setDetailLoading(true);
     setDetailError('');
     setDetailTrace(null);
+    setQrImageUrl(null);
     try {
       const trace = await dashboardApi.getTrace(publicCode);
       setDetailTrace(trace);
+      if (trace.batch.status === 'COMPLETED') {
+        try {
+          const url = await dashboardApi.getBatchQrUrl(publicCode);
+          setQrImageUrl(url);
+        } catch {
+          // QR load failed, silently ignore
+        }
+      }
     } catch (e) {
       setDetailError(getApiErrorMessage(e));
     } finally {
@@ -214,7 +224,7 @@ export default function PackagerDashboardPage() {
           {message && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</p>}
           {error && <ErrorState message={error} />}
           {loading && <LoadingState />}
-          {!loading && roastPendingTransfer.length === 0 && <EmptyState text="Hiện không có lô nào ở trạng thái TRANSFER_PENDING." />}
+          {!loading && roastPendingTransfer.length === 0 && <EmptyState text="Hiện không có lô nào đang chờ tiếp nhận." />}
 
           {!loading && roastPendingTransfer.length > 0 && (
             <div className="space-y-3">
@@ -404,14 +414,28 @@ export default function PackagerDashboardPage() {
               </button>
             </div>
 
-            {detailLoading && <LoadingState text="Đang tải chi tiết lô..." />}
+            {detailLoading && <LoadingState text="Đang tải..." />}
             {!detailLoading && detailError && <ErrorState message={detailError} />}
             {!detailLoading && !detailError && detailTrace && (
-              <TraceTimeline
-                batches={[...detailTrace.parentChain, detailTrace.batch]}
-                farmActivities={detailTrace.farmActivities}
-                ledgerRefs={detailTrace.ledgerRefs}
-              />
+              <>
+                <TraceTimeline
+                  batches={[...detailTrace.parentChain, detailTrace.batch]}
+                  farmActivities={detailTrace.farmActivities}
+                  ledgerRefs={detailTrace.ledgerRefs}
+                />
+                {qrImageUrl && (
+                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">QR truy xuất</p>
+                    <div className="mt-3 flex flex-col items-center gap-3">
+                      <img
+                        src={qrImageUrl}
+                        alt={`QR truy xuất ${detailTrace.batch.publicCode}`}
+                        className="h-48 w-48 rounded-xl border border-amber-200 bg-white p-2"
+                      />
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

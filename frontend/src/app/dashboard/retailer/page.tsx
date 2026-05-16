@@ -24,6 +24,7 @@ export default function RetailerDashboardPage() {
   const [selectedCode, setSelectedCode] = useState('');
   const [detailTrace, setDetailTrace] = useState<TraceResponse | null>(null);
   const [qrDownloading, setQrDownloading] = useState(false);
+  const [qrImageUrl, setQrImageUrl] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(10);
 
@@ -63,7 +64,7 @@ export default function RetailerDashboardPage() {
     setMessage('');
     try {
       await dashboardApi.updateRetailStatus(batchId, 'IN_STOCK');
-      setMessage('Đã cập nhật trạng thái -> IN_STOCK.');
+      setMessage('Cập nhật trạng thái thành công: Đang trong kho.');
       await refresh();
     } catch (e) {
       setError(getApiErrorMessage(e));
@@ -75,7 +76,7 @@ export default function RetailerDashboardPage() {
     setMessage('');
     try {
       await dashboardApi.updateRetailStatus(batchId, 'SOLD');
-      setMessage('Đã cập nhật trạng thái -> SOLD.');
+      setMessage('Cập nhật trạng thái thành công: Đã bán.');
       await refresh();
     } catch (e) {
       setError(getApiErrorMessage(e));
@@ -107,9 +108,16 @@ export default function RetailerDashboardPage() {
     setDetailLoading(true);
     setDetailError('');
     setDetailTrace(null);
+    setQrImageUrl(null);
     try {
       const trace = await dashboardApi.getTrace(publicCode);
       setDetailTrace(trace);
+      try {
+        const url = await dashboardApi.getBatchQrUrl(publicCode);
+        setQrImageUrl(url);
+      } catch {
+        // QR load failed, silently ignore
+      }
     } catch (e) {
       setDetailError(getApiErrorMessage(e));
     } finally {
@@ -123,7 +131,7 @@ export default function RetailerDashboardPage() {
     <DashboardShell title="Retailer Dashboard" subtitle="Quản lý tồn kho và trạng thái bán lẻ">
       <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-stone-900">Danh sách Packaged</h2>
+      <h2 className="text-base font-semibold text-stone-900">Danh sách lô đóng gói</h2>
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-1 text-xs text-slate-600">
               <span>Dòng/trang</span>
@@ -152,7 +160,7 @@ export default function RetailerDashboardPage() {
         {message && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</p>}
         {error && <ErrorState message={error} />}
         {loading && <LoadingState />}
-        {!loading && packaged.length === 0 && <EmptyState text="Chưa có Packaged batch nào." />}
+        {!loading && packaged.length === 0 && <EmptyState text="Chưa có lô nào được phân phối." />}
 
         {!loading && packaged.length > 0 && (
           <>
@@ -245,7 +253,7 @@ export default function RetailerDashboardPage() {
               </button>
             </div>
 
-            {detailLoading && <LoadingState text="Đang tải chi tiết lô..." />}
+            {detailLoading && <LoadingState text="Đang tải..." />}
             {!detailLoading && detailError && <ErrorState message={detailError} />}
             {!detailLoading && !detailError && detailTrace && (
               <>
@@ -254,14 +262,26 @@ export default function RetailerDashboardPage() {
                   farmActivities={detailTrace.farmActivities}
                   ledgerRefs={detailTrace.ledgerRefs}
                 />
-                <button
-                  type="button"
-                  onClick={() => void downloadQr(detailTrace.batch.publicCode)}
-                  disabled={qrDownloading}
-                  className="mt-4 inline-flex rounded-lg border border-amber-200 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-50"
-                >
-                  {qrDownloading ? 'Đang tạo QR...' : 'Tải QR truy xuất'}
-                </button>
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">QR truy xuất</p>
+                <div className="mt-3 flex flex-col items-center gap-3">
+                  {qrImageUrl && (
+                    <img
+                      src={qrImageUrl}
+                      alt={`QR truy xuất ${detailTrace.batch.publicCode}`}
+                      className="h-48 w-48 rounded-xl border border-amber-200 bg-white p-2"
+                    />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void downloadQr(detailTrace.batch.publicCode)}
+                    disabled={qrDownloading}
+                    className="inline-flex w-full items-center justify-center rounded-lg border border-amber-200 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-50"
+                  >
+                    {qrDownloading ? 'Đang tạo QR...' : 'Tải QR truy xuất'}
+                  </button>
+                </div>
+              </div>
               </>
             )}
           </div>

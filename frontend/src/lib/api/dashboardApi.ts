@@ -160,6 +160,7 @@ export interface CreateHarvestInput {
   harvestDate: string;
   coffeeVariety: string;
   weightKg?: string;
+  actualDate?: string;
 }
 
 export interface CreateProcessedInput {
@@ -169,6 +170,7 @@ export interface CreateProcessedInput {
   endDate: string;
   facilityName: string;
   weightKg?: string;
+  actualDate?: string;
 }
 
 export interface CreateRoastInput {
@@ -177,6 +179,7 @@ export interface CreateRoastInput {
   roastDate: string;
   roastDurationMinutes: string;
   weightKg?: string;
+  actualDate?: string;
 }
 
 export interface AccountOptions {
@@ -191,6 +194,7 @@ export interface CreatePackagedInput {
   packageDate: string;
   expiryDate: string;
   packageCount: string;
+  actualDate?: string;
 }
 
 export interface AddEvidenceInput {

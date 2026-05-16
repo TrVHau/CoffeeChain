@@ -19,6 +19,7 @@ const INITIAL_FORM: CreateProcessedInput = {
   endDate: '',
   facilityName: '',
   weightKg: '',
+  actualDate: '',
 };
 
 function getTodayDate(): string {
@@ -29,6 +30,7 @@ function buildInitialForm(): CreateProcessedInput {
   return {
     ...INITIAL_FORM,
     startDate: getTodayDate(),
+    actualDate: getTodayDate(),
   };
 }
 
@@ -74,7 +76,7 @@ export default function ProcessorDashboardPage() {
   const [detailError, setDetailError] = useState('');
   const [selectedCode, setSelectedCode] = useState('');
   const [detailTrace, setDetailTrace] = useState<TraceResponse | null>(null);
-  const [qrDownloading, setQrDownloading] = useState(false);
+  const [qrImageUrl, setQrImageUrl] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(10);
 
@@ -250,9 +252,18 @@ export default function ProcessorDashboardPage() {
     setDetailLoading(true);
     setDetailError('');
     setDetailTrace(null);
+    setQrImageUrl(null);
     try {
       const trace = await dashboardApi.getTrace(publicCode);
       setDetailTrace(trace);
+      if (trace.batch.status === 'COMPLETED') {
+        try {
+          const url = await dashboardApi.getBatchQrUrl(publicCode);
+          setQrImageUrl(url);
+        } catch {
+          // QR load failed, silently ignore
+        }
+      }
     } catch (e) {
       setDetailError(getApiErrorMessage(e));
     } finally {
@@ -262,21 +273,17 @@ export default function ProcessorDashboardPage() {
 
   async function downloadQr() {
     if (!detailTrace?.batch.publicCode) return;
-    setQrDownloading(true);
     setDetailError('');
     try {
-      const url = await dashboardApi.getBatchQrUrl(detailTrace.batch.publicCode);
+      const url = qrImageUrl ?? await dashboardApi.getBatchQrUrl(detailTrace.batch.publicCode);
       const link = document.createElement('a');
       link.href = url;
       link.download = `${detailTrace.batch.publicCode}.png`;
       document.body.appendChild(link);
       link.click();
       link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
       setDetailError(getApiErrorMessage(e));
-    } finally {
-      setQrDownloading(false);
     }
   }
 
@@ -350,7 +357,7 @@ export default function ProcessorDashboardPage() {
               </select>
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block font-medium text-slate-700">Ngày bắt đầu (tự động)</span>
+              <span className="mb-1 block font-medium text-slate-700">Ngày ghi nhận (tự động)</span>
               <input
                 type="text"
                 value={form.startDate}
@@ -358,8 +365,17 @@ export default function ProcessorDashboardPage() {
                 className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
               />
             </label>
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium text-slate-700">Ngày bắt đầu thực tế</span>
+              <input
+                type="date"
+                value={form.actualDate ?? form.startDate}
+                onChange={(e) => setForm((p) => ({ ...p, actualDate: e.target.value }))}
+                className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
+              />
+            </label>
             <div className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              Ngày kết thúc sẽ tự động cập nhật khi bạn chuyển trạng thái lô sang COMPLETED.
+              Ngày kết thúc sẽ được cập nhật khi lô chuyển sang trạng thái hoàn thành.
             </div>
             <label className="block text-sm">
               <span className="mb-1 block font-medium text-slate-700">Tên cơ sở sơ chế</span>
@@ -527,7 +543,7 @@ export default function ProcessorDashboardPage() {
           <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-amber-200 bg-white p-5 shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h3 className="text-base font-semibold text-amber-900">Chi tiết lô sơ chế</h3>
+                <h3 className="text-base font-semibold text-amber-900">Chi tiết lô</h3>
                 <p className="text-xs text-slate-500">Mã công khai: {selectedCode}</p>
               </div>
               <button
@@ -539,7 +555,7 @@ export default function ProcessorDashboardPage() {
               </button>
             </div>
 
-            {detailLoading && <LoadingState text="Đang tải chi tiết lô..." />}
+            {detailLoading && <LoadingState text="Đang tải..." />}
             {!detailLoading && detailError && <ErrorState message={detailError} />}
             {!detailLoading && !detailError && detailTrace && (
               <>
@@ -549,14 +565,25 @@ export default function ProcessorDashboardPage() {
                   ledgerRefs={detailTrace.ledgerRefs}
                 />
                 {detailTrace.batch.status === 'COMPLETED' && (
-                  <button
-                    type="button"
-                    onClick={() => void downloadQr()}
-                    disabled={qrDownloading}
-                    className="mt-4 inline-flex rounded-lg border border-amber-200 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-50"
-                  >
-                    {qrDownloading ? 'Đang tạo QR...' : 'Tải QR truy xuất'}
-                  </button>
+                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">QR truy xuất</p>
+                    <div className="mt-3 flex flex-col items-center gap-3">
+                      {qrImageUrl && (
+                        <img
+                          src={qrImageUrl}
+                          alt={`QR truy xuất ${detailTrace.batch.publicCode}`}
+                          className="h-48 w-48 rounded-xl border border-amber-200 bg-white p-2"
+                        />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => void downloadQr()}
+                        className="inline-flex w-full items-center justify-center rounded-lg border border-amber-200 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50"
+                      >
+                        Tải QR truy xuất
+                      </button>
+                    </div>
+                  </div>
                 )}
               </>
             )}
