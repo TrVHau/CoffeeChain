@@ -26,6 +26,7 @@ import type {
   BatchResponse,
   BatchStatus,
   BatchType,
+  BatchEvidenceItem,
   FarmActivityItem,
   LedgerRefItem,
   TraceResponse,
@@ -91,6 +92,22 @@ function normalizeFarmActivity(raw: unknown): FarmActivityItem {
     activityType: asString(row.activityType),
     activityDate: asString(row.activityDate),
     note: asString(row.note),
+    evidenceHash: asString(row.evidenceHash),
+    evidenceUri: asString(row.evidenceUri),
+    recordedBy: asString(row.recordedBy) || undefined,
+    recordedAt: asString(row.recordedAt) || undefined,
+    txId: asString(row.txId) || undefined,
+    blockNumber: typeof row.blockNumber === 'number'
+      ? row.blockNumber
+      : Number.parseInt(asString(row.blockNumber), 10) || undefined,
+  };
+}
+
+function normalizeBatchEvidence(raw: unknown): BatchEvidenceItem {
+  const row = (raw ?? {}) as Record<string, unknown>;
+  return {
+    batchId: asString(row.batchId),
+    batchType: asString(row.batchType) || undefined,
     evidenceHash: asString(row.evidenceHash),
     evidenceUri: asString(row.evidenceUri),
     recordedBy: asString(row.recordedBy) || undefined,
@@ -261,6 +278,7 @@ async function getTrace(publicCode: string): Promise<TraceResponse> {
       batch: normalizeBatch(row.batch),
       parentChain: ((row.parentChain ?? []) as unknown[]).map(normalizeBatch),
       farmActivities: ((row.farmActivities ?? []) as unknown[]).map(normalizeFarmActivity),
+      batchEvidenceEvents: ((row.batchEvidenceEvents ?? []) as unknown[]).map(normalizeBatchEvidence),
       ledgerRefs: ((row.ledgerRefs ?? []) as unknown[]).map(normalizeLedgerRef),
     };
   } catch (error) {

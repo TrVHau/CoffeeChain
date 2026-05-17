@@ -25,6 +25,15 @@ const STATUS_LABELS: Record<BatchStatus, string> = {
   SOLD: 'Đã bán',
 };
 
+const REQUIRED_FARM_ACTIVITY_TYPES = [
+  'IRRIGATION',
+  'FERTILIZATION',
+  'PEST_CONTROL',
+  'PRUNING',
+  'SHADE_MANAGEMENT',
+  'SOIL_TEST',
+] as const;
+
 function formatType(type: BatchType): string {
   return {
     HARVEST: 'Thu hoạch',
@@ -228,11 +237,14 @@ export default function BatchUpdatePage() {
   function canCompleteBatch(targetBatch: BatchResponse | null): { ok: boolean; reason?: string } {
     if (!targetBatch) return { ok: false, reason: 'Không tìm thấy lô.' };
     if (targetBatch.type === 'HARVEST') {
-      const activityCount = detailTrace?.farmActivities?.filter(
-        (a) => !a.activityType.includes('COMPLETE'),
-      ).length ?? 0;
-      if (activityCount === 0) {
-        return { ok: false, reason: 'Bạn cần ghi nhật ký canh tác ít nhất 1 hoạt động trước khi hoàn thành.' };
+      const completedActivities = new Set(
+        (detailTrace?.farmActivities ?? [])
+          .map((activity) => activity.activityType.toUpperCase())
+          .filter((activityType) => activityType !== 'OTHER'),
+      );
+      const missingActivities = REQUIRED_FARM_ACTIVITY_TYPES.filter((activityType) => !completedActivities.has(activityType));
+      if (missingActivities.length > 0) {
+        return { ok: false, reason: `Bạn cần ghi đủ các bước canh tác trước khi hoàn thành: ${missingActivities.join(', ')}.` };
       }
     }
     return { ok: true };
@@ -927,6 +939,7 @@ export default function BatchUpdatePage() {
                 <TraceTimeline
                   batches={[...detailTrace.parentChain, detailTrace.batch]}
                   farmActivities={detailTrace.farmActivities}
+                  batchEvidenceEvents={detailTrace.batchEvidenceEvents}
                   ledgerRefs={detailTrace.ledgerRefs}
                 />
                 {detailTrace.batch.status === 'COMPLETED' && (

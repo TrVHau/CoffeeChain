@@ -260,6 +260,7 @@ export default function RetailerDashboardPage() {
                 <TraceTimeline
                   batches={[...detailTrace.parentChain, detailTrace.batch]}
                   farmActivities={detailTrace.farmActivities}
+                  batchEvidenceEvents={detailTrace.batchEvidenceEvents}
                   ledgerRefs={detailTrace.ledgerRefs}
                 />
               <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3">

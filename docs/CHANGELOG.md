@@ -151,4 +151,30 @@ Browser (User)
 
 **Ket qua:** Cac phase con can minh chung se khong duoc ghi nhan neu nguoi dung chua chon anh hop le hoac buoc upload/gan evidence that bai.
 
+---
+
+## Cap nhat bo sung tiep theo ngay 2026-05-17
+
+### 8. Hien thi day du lich su anh minh chung cho moi cong doan
+
+**Van de:** `batches.evidence_uri` chi luu anh moi nhat, nen So che/Rang/Dong goi upload nhieu lan nhung trace chi hien 1 link.
+
+**Da sua:**
+- Them bang `batch_evidence_events` va migration `V5__batch_evidence_events.sql`.
+- Event indexer luu moi su kien `EVIDENCE_ADDED` thanh mot dong lich su rieng, co `tx_id`, `block_number`, `recorded_at`.
+- API trace tra them `batchEvidenceEvents`.
+- `TraceTimeline` hien danh sach "Minh chung cong doan (N su kien)" cho tung batch, giong nhat ky canh tac cua Farmer.
+
+### 9. Bat buoc du cac buoc con truoc khi Farmer complete
+
+**Da sua:** Farmer khong con duoc `IRRIGATION` roi complete ngay. Truoc khi hoan thanh phai co du cac buoc:
+`IRRIGATION`, `FERTILIZATION`, `PEST_CONTROL`, `PRUNING`, `SHADE_MANAGEMENT`, `SOIL_TEST`.
+Cac buoc duoc lap lai, nhung moi loai bat buoc phai co it nhat mot lan.
+
+### 10. Sua loi dang nhap phai F5 moi vao dashboard
+
+**Van de:** Login chuyen trang ngay sau khi goi set cookie, trong khi cookie `auth_token` duoc set bat dong bo qua route server.
+
+**Da sua:** `login()` nay la async; man login `await login(...)` truoc khi `router.replace(...)`, dong thoi dieu huong thang ve dashboard dung role.
+
 Backend **luôn** verify JWT từ `Authorization: Bearer <token>` header — không tin vào cookie `user_role`.

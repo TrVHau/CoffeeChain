@@ -132,7 +132,12 @@ export default function TracePage({ params }: { params: { publicCode: string } }
         )}
 
         {!loading && data && (
-          <TraceTimeline batches={batches} farmActivities={data.farmActivities} ledgerRefs={data.ledgerRefs} />
+          <TraceTimeline
+            batches={batches}
+            farmActivities={data.farmActivities}
+            batchEvidenceEvents={data.batchEvidenceEvents}
+            ledgerRefs={data.ledgerRefs}
+          />
         )}
 
         <p className="mt-10 text-center text-xs text-slate-400">

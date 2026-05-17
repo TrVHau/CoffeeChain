@@ -75,6 +75,7 @@ export default function DemoPage() {
             <TraceTimeline
               batches={[...MOCK_TRACE_DEMO_RESPONSE.parentChain, MOCK_TRACE_DEMO_RESPONSE.batch]}
               farmActivities={MOCK_TRACE_DEMO_RESPONSE.farmActivities}
+              batchEvidenceEvents={MOCK_TRACE_DEMO_RESPONSE.batchEvidenceEvents}
               ledgerRefs={MOCK_TRACE_DEMO_RESPONSE.ledgerRefs}
             />
           </section>

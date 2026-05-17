@@ -61,6 +61,17 @@ export interface FarmActivityItem {
   blockNumber?: number;   // EventIndexer
 }
 
+export interface BatchEvidenceItem {
+  batchId: string;
+  batchType?: BatchType | string;
+  evidenceHash: string;
+  evidenceUri: string;
+  recordedBy?: string;
+  recordedAt?: string;
+  txId?: string;
+  blockNumber?: number;
+}
+
 /** LedgerRefItem (aligned with generated/models/LedgerRefItem) */
 export interface LedgerRefItem {
   eventName:   string;
@@ -74,6 +85,7 @@ export interface TraceResponse {
   batch:          BatchResponse;
   parentChain:    BatchResponse[];
   farmActivities: FarmActivityItem[];
+  batchEvidenceEvents?: BatchEvidenceItem[];
   ledgerRefs:     LedgerRefItem[];
 }
 

@@ -9,9 +9,13 @@ const batches: BatchResponse[] = [
     batchId: 'batch-harvest',
     publicCode: 'HARVEST-001',
     type: 'HARVEST',
+    parentBatchId: null,
     ownerMsp: 'Org1MSP',
     ownerUserId: 'farmer_alice',
+    pendingToMsp: null,
     status: 'COMPLETED',
+    evidenceHash: null,
+    evidenceUri: null,
     metadata: {
       farmLocation: 'Cầu Đất',
       harvestDate: '2024-03-15',
@@ -23,8 +27,10 @@ const batches: BatchResponse[] = [
     batchId: 'batch-roast',
     publicCode: 'ROAST-001',
     type: 'ROAST',
+    parentBatchId: 'batch-harvest',
     ownerMsp: 'Org1MSP',
     ownerUserId: 'roaster_charlie',
+    pendingToMsp: null,
     status: 'COMPLETED',
     evidenceHash: 'a'.repeat(64),
     evidenceUri: 'ipfs://QmProof',
@@ -38,8 +44,10 @@ const batches: BatchResponse[] = [
     batchId: 'batch-package',
     publicCode: 'PKG-001',
     type: 'PACKAGED',
+    parentBatchId: 'batch-roast',
     ownerMsp: 'Org2MSP',
     ownerUserId: 'packager_dave',
+    pendingToMsp: null,
     status: 'SOLD',
     evidenceHash: 'f'.repeat(64),
     evidenceUri: 'ipfs://QmPackageProof',
@@ -56,6 +64,8 @@ const farmActivities: FarmActivityItem[] = [
     activityType: 'WATERING',
     activityDate: '2024-03-01',
     note: 'Tưới nước buổi sáng',
+    evidenceHash: '',
+    evidenceUri: '',
     txId: 'tx-water-12345678',
     blockNumber: 55,
   },
@@ -63,21 +73,18 @@ const farmActivities: FarmActivityItem[] = [
 
 const ledgerRefs: LedgerRefItem[] = [
   {
-    batchId: 'batch-harvest',
     eventName: 'BATCH_CREATED',
     txId: 'tx-harvest-abcdef12',
     blockNumber: 101,
     createdAt: '2024-03-15T08:01:00.000Z',
   },
   {
-    batchId: 'batch-roast',
     eventName: 'BATCH_CREATED',
     txId: 'tx-roast-12345678',
     blockNumber: 121,
     createdAt: '2024-03-20T08:01:00.000Z',
   },
   {
-    batchId: 'batch-package',
     eventName: 'BATCH_CREATED',
     txId: 'tx-package-12345678',
     blockNumber: 131,
@@ -114,20 +121,19 @@ describe('TraceTimeline', () => {
       <TraceTimeline batches={batches} farmActivities={farmActivities} ledgerRefs={ledgerRefs} />,
     );
 
-    expect(screen.queryByText(/Tưới nước buổi sáng/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Tưới nước buổi sáng/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /Nhật ký canh tác/i }));
 
-    expect(screen.getByText(/Tưới nước buổi sáng/i)).toBeInTheDocument();
-    expect(screen.getByText(/tx: tx-water/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Tưới nước buổi sáng/i)).not.toBeInTheDocument();
   });
 
-  it('render EvidenceVerifier cho mọi bước có minh chứng', () => {
+  it('render danh sách minh chứng cho mọi bước có minh chứng', () => {
     render(
       <TraceTimeline batches={batches} farmActivities={farmActivities} ledgerRefs={ledgerRefs} />,
     );
 
-    expect(screen.getAllByRole('button', { name: /Xác minh hash chứng cứ/i })).toHaveLength(2);
-    expect(screen.getAllByRole('link', { name: /Xem minh chứng/i })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: /Minh chứng công đoạn/i })).toHaveLength(2);
+    expect(screen.getAllByRole('link', { name: /Xem ảnh/i })).toHaveLength(2);
   });
 });

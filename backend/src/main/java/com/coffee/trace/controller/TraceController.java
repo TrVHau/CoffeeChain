@@ -3,8 +3,10 @@ package com.coffee.trace.controller;
 import com.coffee.trace.dto.response.BatchResponse;
 import com.coffee.trace.dto.response.TraceResponse;
 import com.coffee.trace.entity.BatchEntity;
+import com.coffee.trace.entity.BatchEvidenceEventEntity;
 import com.coffee.trace.entity.FarmActivityEntity;
 import com.coffee.trace.entity.LedgerRefEntity;
+import com.coffee.trace.repository.BatchEvidenceEventRepository;
 import com.coffee.trace.repository.BatchRepository;
 import com.coffee.trace.repository.FarmActivityRepository;
 import com.coffee.trace.repository.LedgerRefRepository;
@@ -31,6 +33,7 @@ public class TraceController {
     private static final Logger log = LoggerFactory.getLogger(TraceController.class);
 
     private final BatchRepository        batchRepository;
+    private final BatchEvidenceEventRepository batchEvidenceEventRepository;
     private final FarmActivityRepository farmActivityRepository;
     private final LedgerRefRepository    ledgerRefRepository;
     private final QrCodeService          qrCodeService;
@@ -38,12 +41,14 @@ public class TraceController {
     private final ObjectMapper           objectMapper;
 
     public TraceController(BatchRepository batchRepository,
+                           BatchEvidenceEventRepository batchEvidenceEventRepository,
                            FarmActivityRepository farmActivityRepository,
                            LedgerRefRepository ledgerRefRepository,
                            QrCodeService qrCodeService,
                            FabricGatewayService fabricGatewayService,
                            ObjectMapper objectMapper) {
         this.batchRepository        = batchRepository;
+        this.batchEvidenceEventRepository = batchEvidenceEventRepository;
         this.farmActivityRepository = farmActivityRepository;
         this.ledgerRefRepository    = ledgerRefRepository;
         this.qrCodeService          = qrCodeService;
@@ -95,6 +100,9 @@ public class TraceController {
         List<LedgerRefEntity> ledgerRefs = chainBatchIds.isEmpty()
                 ? List.of()
                 : ledgerRefRepository.findByBatchIdInOrderByCreatedAtAsc(chainBatchIds);
+        List<BatchEvidenceEventEntity> batchEvidenceEvents = chainBatchIds.isEmpty()
+                ? List.of()
+                : batchEvidenceEventRepository.findByBatchIdInOrderByRecordedAtAsc(chainBatchIds);
 
         List<BatchEntity> enrichedParentChain = parentChain.stream()
                 .map(this::enrichEvidenceFromChainIfMissing)
@@ -105,6 +113,7 @@ public class TraceController {
                 .batch(BatchResponse.from(enrichedCurrent))
                 .parentChain(enrichedParentChain.stream().map(BatchResponse::from).toList())
                 .farmActivities(farmActivities.stream().map(TraceResponse.FarmActivityItem::from).toList())
+                .batchEvidenceEvents(batchEvidenceEvents.stream().map(TraceResponse.BatchEvidenceItem::from).toList())
                 .ledgerRefs(ledgerRefs.stream().map(TraceResponse.LedgerRefItem::from).toList())
                 .build();
         return ResponseEntity.ok(response);

@@ -1,12 +1,12 @@
 ﻿'use client';
 
 import { useState } from 'react';
-import type { BatchResponse, FarmActivityItem, LedgerRefItem } from '@/lib/api/types';
-import { EvidenceVerifier } from '@/components/EvidenceVerifier';
+import type { BatchEvidenceItem, BatchResponse, FarmActivityItem, LedgerRefItem } from '@/lib/api/types';
 
 interface TraceTimelineProps {
   batches: BatchResponse[];
   farmActivities: FarmActivityItem[];
+  batchEvidenceEvents?: BatchEvidenceItem[];
   ledgerRefs: LedgerRefItem[];
 }
 
@@ -172,7 +172,73 @@ function FarmActivityLog({ activities }: { activities: FarmActivityItem[] }) {
   );
 }
 
-export function TraceTimeline({ batches, farmActivities, ledgerRefs }: TraceTimelineProps) {
+function compareEvidenceDesc(a: BatchEvidenceItem, b: BatchEvidenceItem): number {
+  if (typeof a.blockNumber === 'number' && typeof b.blockNumber === 'number' && a.blockNumber !== b.blockNumber) {
+    return b.blockNumber - a.blockNumber;
+  }
+  const aRecorded = a.recordedAt ? parseTime(a.recordedAt) : 0;
+  const bRecorded = b.recordedAt ? parseTime(b.recordedAt) : 0;
+  if (aRecorded !== bRecorded) return bRecorded - aRecorded;
+  return (b.txId ?? '').localeCompare(a.txId ?? '');
+}
+
+function BatchEvidenceLog({ batch, events }: { batch: BatchResponse; events: BatchEvidenceItem[] }) {
+  const [open, setOpen] = useState(true);
+  const fallback: BatchEvidenceItem[] = batch.evidenceUri || batch.evidenceHash
+    ? [{
+      batchId: batch.batchId,
+      batchType: batch.type,
+      evidenceHash: batch.evidenceHash ?? '',
+      evidenceUri: batch.evidenceUri ?? '',
+      recordedAt: batch.updatedAt,
+    }]
+    : [];
+  const allEvents = events.length > 0 ? events : fallback;
+  if (allEvents.length === 0) return null;
+  const sortedEvents = [...allEvents].sort(compareEvidenceDesc);
+
+  return (
+    <div className="mt-3 border-l-2 border-amber-200 pl-3">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1 text-sm font-medium text-amber-700 hover:text-amber-900"
+      >
+        Minh chứng công đoạn ({sortedEvents.length} sự kiện)
+        <span className="text-xs">{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open && (
+        <ul className="mt-2 space-y-2">
+          {sortedEvents.map((event, index) => (
+            <li key={`${event.txId ?? event.evidenceUri}-${index}`} className="text-sm text-slate-700">
+              <span className="text-slate-500">[{formatDate(event.recordedAt ?? batch.updatedAt)}]</span>{' '}
+              {event.evidenceUri && (
+                <a
+                  href={toEvidenceHref(event.evidenceUri)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-rose-700 underline-offset-2 hover:underline"
+                >
+                  Xem ảnh
+                </a>
+              )}
+              {event.txId && (
+                <span className="ml-2 font-mono text-xs text-rose-600">
+                  tx: {event.txId.slice(0, 8)}...
+                </span>
+              )}
+              {typeof event.blockNumber === 'number' && (
+                <span className="ml-2 text-xs text-slate-400">Block #{event.blockNumber}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+export function TraceTimeline({ batches, farmActivities, batchEvidenceEvents = [], ledgerRefs }: TraceTimelineProps) {
   const steps = [...batches].sort((left, right) => parseTime(right.createdAt) - parseTime(left.createdAt));
 
   return (
@@ -213,16 +279,10 @@ export function TraceTimeline({ batches, farmActivities, ledgerRefs }: TraceTime
                 </dl>
               )}
 
-              {(batch.evidenceHash || batch.evidenceUri) && (
-                <div className="mt-2">
-                  <p className="text-xs font-medium text-slate-500">Minh chứng công đoạn</p>
-                  <EvidenceVerifier
-                    batchId={batch.batchId}
-                    onChainHash={batch.evidenceHash ?? ''}
-                    evidenceUri={batch.evidenceUri ?? undefined}
-                  />
-                </div>
-              )}
+              <BatchEvidenceLog
+                batch={batch}
+                events={batchEvidenceEvents.filter((event) => event.batchId === batch.batchId)}
+              />
 
               {batch.type === 'HARVEST' && <FarmActivityLog activities={farmActivities} />}
 

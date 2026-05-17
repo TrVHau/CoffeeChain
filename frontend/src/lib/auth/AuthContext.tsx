@@ -32,7 +32,7 @@ interface AuthUser {
 
 interface AuthContextType {
   user: AuthUser | null;
-  login: (userId: string, token: string, role: UserRole, org?: string) => void;
+  login: (userId: string, token: string, role: UserRole, org?: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
   isHydrated: boolean;
@@ -97,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsHydrated(true);
   }, []);
 
-  const login = (userId: string, token: string, role: UserRole, org?: string) => {
+  const login = async (userId: string, token: string, role: UserRole, org?: string) => {
     const normalizedToken = normalizeToken(token);
     const authUser: AuthUser = {
       userId,
@@ -107,9 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     setUser(authUser);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(authUser));
-    // Set auth_token as HttpOnly cookie via server route (protects against XSS).
-    // user_role and user_org are UI-only state — not used for backend authorization.
-    void setSessionCookie(normalizedToken);
+    await setSessionCookie(normalizedToken);
   };
 
   const logout = () => {

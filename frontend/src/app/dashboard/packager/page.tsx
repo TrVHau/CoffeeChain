@@ -421,6 +421,7 @@ export default function PackagerDashboardPage() {
                 <TraceTimeline
                   batches={[...detailTrace.parentChain, detailTrace.batch]}
                   farmActivities={detailTrace.farmActivities}
+                  batchEvidenceEvents={detailTrace.batchEvidenceEvents}
                   ledgerRefs={detailTrace.ledgerRefs}
                 />
                 {qrImageUrl && (

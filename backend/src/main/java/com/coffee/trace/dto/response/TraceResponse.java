@@ -1,5 +1,6 @@
 package com.coffee.trace.dto.response;
 
+import com.coffee.trace.entity.BatchEvidenceEventEntity;
 import com.coffee.trace.entity.FarmActivityEntity;
 import com.coffee.trace.entity.LedgerRefEntity;
 import lombok.Builder;
@@ -13,6 +14,7 @@ public class TraceResponse {
     private BatchResponse            batch;
     private List<BatchResponse>      parentChain;     // harvest → processed → roast → packaged
     private List<FarmActivityItem>   farmActivities;  // from farm_activities table
+    private List<BatchEvidenceItem>  batchEvidenceEvents;
     private List<LedgerRefItem>      ledgerRefs;      // tx references
 
     @Data
@@ -39,6 +41,32 @@ public class TraceResponse {
                     .recordedAt(a.getRecordedAt() != null ? a.getRecordedAt().toString() : null)
                     .txId(a.getTxId())
                     .blockNumber(a.getBlockNumber())
+                    .build();
+        }
+    }
+
+    @Data
+    @Builder
+    public static class BatchEvidenceItem {
+        private String batchId;
+        private String batchType;
+        private String evidenceHash;
+        private String evidenceUri;
+        private String recordedBy;
+        private String recordedAt;
+        private String txId;
+        private Long   blockNumber;
+
+        public static BatchEvidenceItem from(BatchEvidenceEventEntity e) {
+            return BatchEvidenceItem.builder()
+                    .batchId(e.getBatchId())
+                    .batchType(e.getBatchType())
+                    .evidenceHash(e.getEvidenceHash())
+                    .evidenceUri(e.getEvidenceUri())
+                    .recordedBy(e.getRecordedBy())
+                    .recordedAt(e.getRecordedAt() != null ? e.getRecordedAt().toString() : null)
+                    .txId(e.getTxId())
+                    .blockNumber(e.getBlockNumber())
                     .build();
         }
     }

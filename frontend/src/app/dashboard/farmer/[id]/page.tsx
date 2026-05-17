@@ -23,6 +23,15 @@ const ACTIVITY_TYPES = [
   'OTHER',
 ] as const;
 
+const REQUIRED_ACTIVITY_TYPES = [
+  'IRRIGATION',
+  'FERTILIZATION',
+  'PEST_CONTROL',
+  'PRUNING',
+  'SHADE_MANAGEMENT',
+  'SOIL_TEST',
+] as const;
+
 const INITIAL_ACTIVITY: RecordFarmActivityInput = {
   activityType: 'IRRIGATION',
   activityDate: '',
@@ -73,6 +82,15 @@ function shouldAutoProgress(batch: BatchResponse | null): boolean {
 
 function isCompleteActivity(activityType: string): boolean {
   return activityType === 'COMPLETE';
+}
+
+function getMissingRequiredActivities(activities: FarmActivityItem[]): string[] {
+  const completed = new Set(
+    activities
+      .map((activity) => activity.activityType.toUpperCase())
+      .filter((activityType) => activityType !== 'OTHER'),
+  );
+  return REQUIRED_ACTIVITY_TYPES.filter((activityType) => !completed.has(activityType));
 }
 
 function buildQrImageUrl(publicCode: string): string {
@@ -179,6 +197,11 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
     try {
       const completeMode = isCompleteActivity(form.activityType);
       if (completeMode) {
+        const missingActivities = getMissingRequiredActivities(activities);
+        if (missingActivities.length > 0) {
+          setError(`Cần ghi đủ các bước canh tác trước khi hoàn thành: ${missingActivities.join(', ')}.`);
+          return;
+        }
         if (!finalWeightKg.trim()) {
           setError('Bạn cần nhập khối lượng thực tế để hoàn thành batch.');
           return;

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth/useAuth';
-import { type UserRole } from '@/lib/auth/AuthContext';
+import { ROLE_DASHBOARD, type UserRole } from '@/lib/auth/AuthContext';
 import { authenticateDevUser, DEV_LOGIN_PASSWORD, DEV_USERS } from '@/lib/mock/authMockData';
 import { apiClient } from '@/lib/api/client';
 
@@ -58,17 +58,20 @@ function LoginForm() {
       if (!role) {
         throw new Error('Role không hợp lệ từ backend.');
       }
-      login(response.data.userId, response.data.token, role, response.data.org ?? 'UNKNOWN');
+      await login(response.data.userId, response.data.token, role, response.data.org ?? 'UNKNOWN');
 
       const redirectTo = searchParams.get('redirectTo');
-      router.push(redirectTo ?? '/dashboard');
+      router.replace(redirectTo ?? ROLE_DASHBOARD[role]);
+      router.refresh();
     } catch {
       // Keep local mock fallback for offline FE-only development.
       const fallback = authenticateDevUser(userId.trim(), password);
       if (fallback.ok) {
-        login(fallback.userId, fallback.token, fallback.role as UserRole, fallback.org);
+        const role = fallback.role as UserRole;
+        await login(fallback.userId, fallback.token, role, fallback.org);
         const redirectTo = searchParams.get('redirectTo');
-        router.push(redirectTo ?? '/dashboard');
+        router.replace(redirectTo ?? ROLE_DASHBOARD[role]);
+        router.refresh();
       } else {
         setError(fallback.message);
       }

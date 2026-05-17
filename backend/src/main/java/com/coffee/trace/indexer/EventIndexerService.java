@@ -1,7 +1,9 @@
 package com.coffee.trace.indexer;
 
+import com.coffee.trace.entity.BatchEvidenceEventEntity;
 import com.coffee.trace.entity.BatchEntity;
 import com.coffee.trace.entity.FarmActivityEntity;
+import com.coffee.trace.repository.BatchEvidenceEventRepository;
 import com.coffee.trace.repository.BatchRepository;
 import com.coffee.trace.repository.FarmActivityRepository;
 import com.coffee.trace.repository.LedgerRefRepository;
@@ -51,6 +53,7 @@ public class EventIndexerService {
     private static final Logger log = LoggerFactory.getLogger(EventIndexerService.class);
 
     private final FabricGatewayService   fabricGateway;
+    private final BatchEvidenceEventRepository batchEvidenceEventRepository;
     private final BatchRepository        batchRepository;
     private final FarmActivityRepository farmActivityRepository;
     private final LedgerRefRepository    ledgerRefRepository;
@@ -66,11 +69,13 @@ public class EventIndexerService {
     private volatile CloseableIterator<ChaincodeEvent> org2EventIterator;
 
     public EventIndexerService(FabricGatewayService fabricGateway,
+                               BatchEvidenceEventRepository batchEvidenceEventRepository,
                                BatchRepository batchRepository,
                                FarmActivityRepository farmActivityRepository,
                                LedgerRefRepository ledgerRefRepository,
                                ObjectMapper objectMapper) {
         this.fabricGateway        = fabricGateway;
+        this.batchEvidenceEventRepository = batchEvidenceEventRepository;
         this.batchRepository      = batchRepository;
         this.farmActivityRepository = farmActivityRepository;
         this.ledgerRefRepository  = ledgerRefRepository;
@@ -142,7 +147,7 @@ public class EventIndexerService {
             case "BATCH_STATUS_UPDATED"   -> handleStatusUpdated(payload);
             case "TRANSFER_REQUESTED"     -> handleTransferRequested(payload);
             case "TRANSFER_ACCEPTED"      -> handleTransferAccepted(payload);
-            case "EVIDENCE_ADDED"         -> handleEvidenceAdded(payload);
+            case "EVIDENCE_ADDED"         -> handleEvidenceAdded(payload, txId, blockNum);
             case "BATCH_WEIGHT_UPDATED"   -> handleBatchWeightUpdated(payload);
             case "BATCH_ROAST_DURATION_UPDATED" -> handleRoastDurationUpdated(payload);
             case "FARM_ACTIVITY_RECORDED" -> handleFarmActivity(payload, txId, blockNum);
@@ -253,12 +258,32 @@ public class EventIndexerService {
         }
     }
 
-    private void handleEvidenceAdded(Map<String, String> p) {
+    private void handleEvidenceAdded(Map<String, String> p, String txId, long blockNum) {
         String batchId = p.get("batchId");
-        String hash    = p.get("evidenceHash");
-        String uri     = p.get("evidenceUri");
+        String hash    = p.getOrDefault("evidenceHash", p.getOrDefault("hash", ""));
+        String uri     = p.getOrDefault("evidenceUri", p.getOrDefault("uri", ""));
         if (batchId != null) {
             batchRepository.updateEvidence(batchId, hash, uri);
+            if (txId == null || txId.isBlank() || !batchEvidenceEventRepository.existsByTxId(txId)) {
+                String type = batchRepository.findById(batchId)
+                        .map(BatchEntity::getType)
+                        .orElse(null);
+                try {
+                    batchEvidenceEventRepository.save(BatchEvidenceEventEntity.builder()
+                            .batchId(batchId)
+                            .batchType(type)
+                            .evidenceHash(hash)
+                            .evidenceUri(uri)
+                            .recordedBy(p.get("recordedBy"))
+                            .recordedAt(Instant.now())
+                            .txId(txId)
+                            .blockNumber(blockNum)
+                            .createdAt(Instant.now())
+                            .build());
+                } catch (DataIntegrityViolationException duplicate) {
+                    log.debug("EVIDENCE_ADDED duplicate txId={} ignored", txId);
+                }
+            }
             log.info("EVIDENCE_ADDED: batchId={} hash={}", batchId, hash);
         }
     }

@@ -124,6 +124,26 @@ export function getMockTraceResponse(publicCode: string): TraceResponse {
                 blockNumber: 128,
             },
         ],
+        batchEvidenceEvents: [
+            {
+                batchId: 'BATCH-ROAST-001',
+                batchType: 'ROAST',
+                evidenceHash: MOCK_ROAST_EVIDENCE_HASH,
+                evidenceUri: MOCK_ROAST_EVIDENCE_URI,
+                recordedAt: daysAgo(anchor, 10),
+                txId: 'txroastevidence001',
+                blockNumber: 132,
+            },
+            {
+                batchId: 'BATCH-ROAST-001',
+                batchType: 'ROAST',
+                evidenceHash: MOCK_ROAST_EVIDENCE_HASH,
+                evidenceUri: MOCK_ROAST_EVIDENCE_URI,
+                recordedAt: daysAgo(anchor, 8),
+                txId: 'txroastevidence002',
+                blockNumber: 141,
+            },
+        ],
         ledgerRefs: [
             {
                 eventName: 'BATCH_CREATED',

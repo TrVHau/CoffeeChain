@@ -565,6 +565,7 @@ export default function ProcessorDashboardPage() {
                 <TraceTimeline
                   batches={[...detailTrace.parentChain, detailTrace.batch]}
                   farmActivities={detailTrace.farmActivities}
+                  batchEvidenceEvents={detailTrace.batchEvidenceEvents}
                   ledgerRefs={detailTrace.ledgerRefs}
                 />
                 {detailTrace.batch.status === 'COMPLETED' && (
