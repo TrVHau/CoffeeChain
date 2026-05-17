@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, {
   createContext,
@@ -50,6 +50,27 @@ function roleToOrg(role: UserRole): string {
   return role === 'PACKAGER' || role === 'RETAILER' ? 'Org2' : 'Org1';
 }
 
+async function setSessionCookie(token: string): Promise<void> {
+  try {
+    await fetch('/api/auth/set-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+  } catch {
+    // Fallback: set non-HttpOnly cookie if route unavailable (dev without full Next.js server)
+    document.cookie = `auth_token=${token}; path=/; SameSite=Lax`;
+  }
+}
+
+async function clearSessionCookie(): Promise<void> {
+  try {
+    await fetch('/api/auth/set-session', { method: 'DELETE' });
+  } catch {
+    document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -86,17 +107,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     setUser(authUser);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(authUser));
-    document.cookie = `auth_token=${normalizedToken}; path=/; SameSite=Lax`;
-    document.cookie = `user_role=${role}; path=/; SameSite=Lax`;
-    document.cookie = `user_org=${encodeURIComponent(authUser.org)}; path=/; SameSite=Lax`;
+    // Set auth_token as HttpOnly cookie via server route (protects against XSS).
+    // user_role and user_org are UI-only state — not used for backend authorization.
+    void setSessionCookie(normalizedToken);
   };
 
   const logout = () => {
     setUser(null);
     localStorage.removeItem(STORAGE_KEY);
-    document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-    document.cookie = 'user_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-    document.cookie = 'user_org=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    void clearSessionCookie();
   };
 
   return (

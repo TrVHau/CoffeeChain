@@ -10,6 +10,7 @@ import { apiClient } from '@/lib/api/client';
 import type { BatchResponse, FarmActivityItem, TraceResponse } from '@/lib/api/types';
 import { useRoleGuard } from '@/lib/auth/useRoleGuard';
 import { getWeightValidationError, normalizeWeightInput } from '@/lib/validation/weight';
+import { validateEvidenceFile } from '@/lib/validation/file';
 
 const ACTIVITY_TYPES = [
   'IRRIGATION',
@@ -187,10 +188,11 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
           setError(weightError);
           return;
         }
-        if (!evidenceFile) {
-          setError('Bạn cần chọn ảnh minh chứng trước khi hoàn thành batch.');
-          return;
-        }
+      }
+      // Evidence is required for ALL activity types, not just COMPLETE
+      if (!evidenceFile) {
+        setError('Bạn cần chọn ảnh minh chứng cho hoạt động này.');
+        return;
       }
 
       let payload = { ...form };
@@ -206,6 +208,11 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
         payload = { ...payload, activityDate: getTodayDate() };
       }
       if (evidenceFile) {
+        const fileCheck = validateEvidenceFile(evidenceFile);
+        if (!fileCheck.ok) {
+          setError(fileCheck.error ?? 'File không hợp lệ.');
+          return;
+        }
         const evidence = await dashboardApi.uploadEvidence(evidenceFile);
         payload = {
           ...payload,
@@ -390,8 +397,10 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
                     <span className="mb-1 block font-medium text-slate-700">Khối lượng thực tế (kg)</span>
                     <input
                       type="number"
-                      min="0"
+                      min="0.001"
+                      max="100000"
                       step="any"
+                      inputMode="decimal"
                       value={finalWeightKg}
                       onChange={(e) => setFinalWeightKg(e.target.value)}
                       disabled={!isCompleteActivity(form.activityType)}
@@ -409,16 +418,17 @@ export default function FarmerBatchDetailPage({ params }: { params: { id: string
                     />
                   </label>
                   <label className="block text-sm">
-                    <span className="mb-1 block font-medium text-slate-700">Ảnh minh chứng</span>
+                    <span className="mb-1 block font-medium text-slate-700">Ảnh minh chứng (tối đa 10 MB)</span>
                     <input
                       type="file"
-                      accept="image/*"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
                       onChange={(e) => setEvidenceFile(e.target.files?.[0] ?? null)}
-                      required
                       className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
                     />
                   </label>
-                  {evidenceFile && <p className="text-xs text-slate-500">Đã chọn: {evidenceFile.name}</p>}
+                  {evidenceFile && (
+                    <p className="text-xs text-slate-500">Đã chọn: {evidenceFile.name} ({(evidenceFile.size / 1024 / 1024).toFixed(1)} MB)</p>
+                  )}
                   <button
                     type="button"
                     disabled={submitting}

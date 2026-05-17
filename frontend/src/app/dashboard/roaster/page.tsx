@@ -9,6 +9,7 @@ import { QrScanner } from '@/components/QrScanner';
 import { dashboardApi, getApiErrorMessage, type CreateRoastInput } from '@/lib/api/dashboardApi';
 import { TraceTimeline } from '@/components/TraceTimeline';
 import { getWeightValidationError, normalizeWeightInput } from '@/lib/validation/weight';
+import { validateEvidenceFile } from '@/lib/validation/file';
 import type { BatchResponse, BatchStatus, TraceResponse } from '@/lib/api/types';
 import { useRoleGuard } from '@/lib/auth/useRoleGuard';
 
@@ -165,12 +166,14 @@ export default function RoasterDashboardPage() {
     setError('');
     setMessage('');
     try {
+      const fileCheck = validateEvidenceFile(evidenceFile);
+      if (!fileCheck.ok) { setError(fileCheck.error ?? 'File không hợp lệ.'); return; }
+      const evidence = await dashboardApi.uploadEvidence(evidenceFile);
       const created = await dashboardApi.createRoast({
         ...createForm,
         roastDate: getTodayDate(),
         roastDurationMinutes: '0',
       });
-      const evidence = await dashboardApi.uploadEvidence(evidenceFile);
       await dashboardApi.addEvidence(created.batchId, evidence);
       setCreateForm((p) => ({ ...buildInitialCreate(), parentBatchId: p.parentBatchId, roastProfile: p.roastProfile }));
       setEvidenceFile(null);
@@ -399,14 +402,14 @@ export default function RoasterDashboardPage() {
                 <span className="mb-1 block font-medium text-slate-700">Ảnh minh chứng</span>
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
                   onChange={(e) => setEvidenceFile(e.target.files?.[0] ?? null)}
                   required
                   className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
                 />
               </label>
               {evidenceFile && (
-                <p className="text-xs text-slate-500">Đã chọn: {evidenceFile.name}</p>
+                <p className="text-xs text-slate-500">Đã chọn: {evidenceFile.name} ({(evidenceFile.size / 1024 / 1024).toFixed(1)} MB)</p>
               )}
               <button
                 type="submit"

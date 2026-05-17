@@ -7,6 +7,7 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/dashboard/UiS
 import { StatusBadge } from '@/components/dashboard/StatusBadge';
 import { dashboardApi, getApiErrorMessage, type CreateHarvestInput } from '@/lib/api/dashboardApi';
 import { getWeightValidationError, normalizeWeightInput } from '@/lib/validation/weight';
+import { validateEvidenceFile } from '@/lib/validation/file';
 import type { BatchResponse, BatchStatus } from '@/lib/api/types';
 import { useRoleGuard } from '@/lib/auth/useRoleGuard';
 
@@ -137,11 +138,17 @@ export default function FarmerDashboardPage() {
     setError('');
     setMessage('');
     try {
+      // Validate before uploading to avoid creating a record with no evidence
+      const fileCheck = validateEvidenceFile(evidenceFile);
+      if (!fileCheck.ok) {
+        setError(fileCheck.error ?? 'File không hợp lệ.');
+        return;
+      }
+      const evidence = await dashboardApi.uploadEvidence(evidenceFile);
       const created = await dashboardApi.createHarvest({
         ...form,
         harvestDate: getTodayDate(),
       });
-      const evidence = await dashboardApi.uploadEvidence(evidenceFile);
       await dashboardApi.addHarvestEvidence(created.batchId, evidence);
       setForm((prev) => ({ ...buildInitialForm(), farmLocation: prev.farmLocation }));
       setEvidenceFile(null);
@@ -258,16 +265,16 @@ export default function FarmerDashboardPage() {
               </div>
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block font-medium text-slate-700">Ảnh minh chứng</span>
+              <span className="mb-1 block font-medium text-slate-700">Ảnh minh chứng (tối đa 10 MB)</span>
               <input
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp,image/gif"
                 onChange={(e) => setEvidenceFile(e.target.files?.[0] ?? null)}
                 required
                 className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
               />
             </label>
-            {evidenceFile && <p className="text-xs text-slate-500">Đã chọn: {evidenceFile.name}</p>}
+            {evidenceFile && <p className="text-xs text-slate-500">Đã chọn: {evidenceFile.name} ({(evidenceFile.size / 1024 / 1024).toFixed(1)} MB)</p>}
             <button
               type="submit"
               disabled={submitting || !form.farmLocation}

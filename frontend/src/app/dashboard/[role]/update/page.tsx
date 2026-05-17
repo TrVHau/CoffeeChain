@@ -9,7 +9,8 @@ import { StatusBadge } from '@/components/dashboard/StatusBadge';
 import { TraceTimeline } from '@/components/TraceTimeline';
 import { dashboardApi, getApiErrorMessage } from '@/lib/api/dashboardApi';
 import { apiClient } from '@/lib/api/client';
-import { getWeightValidationError, normalizeWeightInput } from '@/lib/validation/weight';
+import { getDurationValidationError, getWeightValidationError, normalizeWeightInput } from '@/lib/validation/weight';
+import { validateEvidenceFile } from '@/lib/validation/file';
 import type { BatchResponse, BatchStatus, BatchType, TraceResponse } from '@/lib/api/types';
 import type { UserRole } from '@/lib/auth/AuthContext';
 import { useRoleGuard } from '@/lib/auth/useRoleGuard';
@@ -220,13 +221,30 @@ export default function BatchUpdatePage() {
 
   function requiresStatusEvidence(targetBatch: BatchResponse | null): boolean {
     if (!targetBatch) return false;
+    // Evidence is required for every status update on processing batches (IN_PROCESS and COMPLETED)
     return targetBatch.type === 'HARVEST' || targetBatch.type === 'PROCESSED' || targetBatch.type === 'ROAST';
+  }
+
+  function canCompleteBatch(targetBatch: BatchResponse | null): { ok: boolean; reason?: string } {
+    if (!targetBatch) return { ok: false, reason: 'Không tìm thấy lô.' };
+    if (targetBatch.type === 'HARVEST') {
+      const activityCount = detailTrace?.farmActivities?.filter(
+        (a) => !a.activityType.includes('COMPLETE'),
+      ).length ?? 0;
+      if (activityCount === 0) {
+        return { ok: false, reason: 'Bạn cần ghi nhật ký canh tác ít nhất 1 hoạt động trước khi hoàn thành.' };
+      }
+    }
+    return { ok: true };
   }
 
   async function attachEvidenceForBatch(targetBatch: BatchResponse): Promise<void> {
     if (!statusEvidenceFile) {
       throw new Error('Vui lòng chọn ảnh minh chứng khi cập nhật trạng thái.');
     }
+    const fileCheck = validateEvidenceFile(statusEvidenceFile);
+    if (!fileCheck.ok) throw new Error(fileCheck.error);
+
     const uploaded = await dashboardApi.uploadEvidence(statusEvidenceFile);
 
     if (targetBatch.type === 'HARVEST') {
@@ -265,6 +283,16 @@ export default function BatchUpdatePage() {
       setError('Bạn cần nhập thời gian rang khi hoàn thành batch.');
       return;
     }
+    if (batch.type === 'ROAST') {
+      const durationError = getDurationValidationError(inlineRoastDurationMinutes, 'Thời gian rang');
+      if (durationError) { setError(durationError); return; }
+    }
+    // Enforce sub-step completion requirements
+    const completionCheck = canCompleteBatch(batch);
+    if (!completionCheck.ok) {
+      setError(completionCheck.reason ?? 'Chưa đủ điều kiện hoàn thành.');
+      return;
+    }
     if (requiresStatusEvidence(batch) && !statusEvidenceFile) {
       setError('Vui lòng chọn ảnh minh chứng khi cập nhật trạng thái.');
       return;
@@ -276,6 +304,9 @@ export default function BatchUpdatePage() {
     setError('');
     setMessage('');
     try {
+      if (requiresStatusEvidence(batch)) {
+        await attachEvidenceForBatch(batch);
+      }
       if (batch.type === 'HARVEST') {
         await dashboardApi.updateHarvestStatusWithWeight(batch.batchId, nextStatus, normalizedWeight);
       } else if (batch.type === 'PROCESSED') {
@@ -287,9 +318,6 @@ export default function BatchUpdatePage() {
           normalizedWeight,
           inlineRoastDurationMinutes.trim(),
         );
-      }
-      if (requiresStatusEvidence(batch)) {
-        await attachEvidenceForBatch(batch);
       }
       setMessage('Đã cập nhật trạng thái và khối lượng thực tế.');
       setStatusEvidenceFile(null);
@@ -324,6 +352,9 @@ export default function BatchUpdatePage() {
     setError('');
     setMessage('');
     try {
+      if (requiresStatusEvidence(batch)) {
+        await attachEvidenceForBatch(batch);
+      }
       if (batch.type === 'HARVEST') {
         await dashboardApi.updateHarvestStatus(batch.batchId, nextStatus);
       } else if (batch.type === 'PROCESSED') {
@@ -333,10 +364,7 @@ export default function BatchUpdatePage() {
       } else if (batch.type === 'PACKAGED') {
         await dashboardApi.updateRetailStatus(batch.batchId, nextStatus as 'IN_STOCK' | 'SOLD');
       }
-      if (requiresStatusEvidence(batch)) {
-        await attachEvidenceForBatch(batch);
-      }
-      setMessage(`Đã cập nhật trạng thái -> ${nextStatus}.`);
+      setMessage('Đã cập nhật trạng thái.');
       setStatusEvidenceFile(null);
       await refresh();
     } catch (e) {
@@ -394,6 +422,11 @@ export default function BatchUpdatePage() {
     setError('');
     setMessage('');
     try {
+      const fileCheck = validateEvidenceFile(roastEvidenceFile);
+      if (!fileCheck.ok) {
+        setError(fileCheck.error ?? 'File không hợp lệ.');
+        return;
+      }
       const uploaded = await dashboardApi.uploadEvidence(roastEvidenceFile);
       await dashboardApi.addEvidence(batch.batchId, uploaded);
       setRoastEvidenceFile(null);
@@ -440,6 +473,15 @@ export default function BatchUpdatePage() {
     setError('');
     setMessage('');
     try {
+      // Validate evidence file before creating any record
+      const fileCheck = validateEvidenceFile(packageEvidenceFile);
+      if (!fileCheck.ok) {
+        setError(fileCheck.error ?? 'File không hợp lệ.');
+        return;
+      }
+
+      const uploaded = await dashboardApi.uploadEvidence(packageEvidenceFile);
+
       const createdPackaged = await dashboardApi.createPackaged({
         parentBatchId: batch.batchId,
         packageWeight: normalizedWeight,
@@ -448,7 +490,6 @@ export default function BatchUpdatePage() {
         packageCount: '1',
       });
 
-      const uploaded = await dashboardApi.uploadEvidence(packageEvidenceFile);
       await dashboardApi.addPackagedEvidence(createdPackaged.batchId, uploaded);
 
       setPackagedChild(createdPackaged);
@@ -554,8 +595,10 @@ export default function BatchUpdatePage() {
                     <span className="mb-1 block font-medium text-slate-700">Khối lượng thực tế (kg)</span>
                     <input
                       type="number"
-                      min="0"
+                      min="0.001"
+                      max="100000"
                       step="any"
+                      inputMode="decimal"
                       value={inlineWeightKg}
                       onChange={(e) => setInlineWeightKg(e.target.value)}
                       disabled={nextStatus !== 'COMPLETED'}
@@ -566,8 +609,13 @@ export default function BatchUpdatePage() {
 
                   {batch.type === 'ROAST' && (
                     <label className="block text-sm">
-                      <span className="mb-1 block font-medium text-slate-700">Thời gian rang (phút)</span>
+                      <span className="mb-1 block font-medium text-slate-700">Thời gian rang (phút, 1–600)</span>
                       <input
+                        type="number"
+                        min="1"
+                        max="600"
+                        step="1"
+                        inputMode="numeric"
                         value={inlineRoastDurationMinutes}
                         onChange={(e) => setInlineRoastDurationMinutes(e.target.value)}
                         disabled={nextStatus !== 'COMPLETED'}
@@ -601,18 +649,27 @@ export default function BatchUpdatePage() {
                   )}
                   {requiresStatusEvidence(batch) && (
                     <label className="block text-sm">
-                      <span className="mb-1 block font-medium text-slate-700">Ảnh minh chứng</span>
+                      <span className="mb-1 block font-medium text-slate-700">Ảnh minh chứng (bắt buộc)</span>
                       <input
                         type="file"
-                        accept="image/*"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
                         onChange={(e) => setStatusEvidenceFile(e.target.files?.[0] ?? null)}
                         className="w-full rounded-lg border border-amber-200 px-3 py-2 outline-none ring-amber-400 focus:ring"
                       />
                       {statusEvidenceFile && (
-                        <span className="mt-1 block text-xs text-slate-500">Đã chọn: {statusEvidenceFile.name}</span>
+                        <span className="mt-1 block text-xs text-slate-500">Đã chọn: {statusEvidenceFile.name} ({(statusEvidenceFile.size / 1024 / 1024).toFixed(1)} MB)</span>
                       )}
                     </label>
                   )}
+                  {/* Sub-step warning — only shown when trying to COMPLETE */}
+                  {nextStatus === 'COMPLETED' && (() => {
+                    const check = canCompleteBatch(batch);
+                    return !check.ok ? (
+                      <div className="rounded-lg border border-yellow-300 bg-yellow-50 px-3 py-2 text-xs text-yellow-800">
+                        ⚠️ {check.reason}
+                      </div>
+                    ) : null;
+                  })()}
 
                   <button
                     type="button"
