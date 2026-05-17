@@ -4,6 +4,7 @@ import com.coffee.trace.dto.response.TraceResponse;
 import com.coffee.trace.entity.BatchEntity;
 import com.coffee.trace.entity.FarmActivityEntity;
 import com.coffee.trace.entity.LedgerRefEntity;
+import com.coffee.trace.repository.BatchEvidenceEventRepository;
 import com.coffee.trace.repository.BatchRepository;
 import com.coffee.trace.repository.FarmActivityRepository;
 import com.coffee.trace.repository.LedgerRefRepository;
@@ -32,6 +33,8 @@ class TraceControllerTest {
     @Mock
     private BatchRepository batchRepository;
     @Mock
+    private BatchEvidenceEventRepository batchEvidenceEventRepository;
+    @Mock
     private FarmActivityRepository farmActivityRepository;
     @Mock
     private LedgerRefRepository ledgerRefRepository;
@@ -46,6 +49,7 @@ class TraceControllerTest {
     void trace_returnsParentChainOldestFirst_andAggregatesRefsAcrossChain() {
         TraceController controller = new TraceController(
                 batchRepository,
+                batchEvidenceEventRepository,
                 farmActivityRepository,
                 ledgerRefRepository,
                 qrCodeService,
@@ -113,6 +117,8 @@ class TraceControllerTest {
                                 .createdAt(Instant.parse("2026-03-15T12:31:00Z"))
                                 .build()
                 ));
+        when(batchEvidenceEventRepository.findByBatchIdInOrderByRecordedAtAsc(List.of("HAR-1", "PRO-1", "ROA-1", "PKG-1")))
+                .thenReturn(List.of());
 
         ResponseEntity<TraceResponse> response = controller.trace("PKG-CODE");
 
@@ -123,9 +129,11 @@ class TraceControllerTest {
                 response.getBody().getParentChain().stream().map(p -> p.getBatchId()).toList()
         );
         assertEquals(1, response.getBody().getFarmActivities().size());
+        assertEquals(0, response.getBody().getBatchEvidenceEvents().size());
         assertEquals(2, response.getBody().getLedgerRefs().size());
 
         verify(farmActivityRepository).findByHarvestBatchIdOrderByActivityDateAsc("HAR-1");
+        verify(batchEvidenceEventRepository).findByBatchIdInOrderByRecordedAtAsc(List.of("HAR-1", "PRO-1", "ROA-1", "PKG-1"));
         verify(ledgerRefRepository).findByBatchIdInOrderByCreatedAtAsc(List.of("HAR-1", "PRO-1", "ROA-1", "PKG-1"));
     }
 }
